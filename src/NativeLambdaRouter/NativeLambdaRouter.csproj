@@ -10,12 +10,13 @@
 
     <!-- Package metadata -->
     <PackageId>NativeLambdaRouter</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Authors>Swepay</Authors>
     <Description>A high-performance API Gateway routing library for AWS Lambda, optimized for Native AOT. Provides declarative route mapping to mediator commands with path parameter extraction, health checks, and automatic error handling.</Description>
     <PackageTags>aws;lambda;api-gateway;routing;native-aot;serverless;cqrs;mediator</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>native-lambda-router-icon.png</PackageIcon>
     <RepositoryUrl>https://github.com/swepay/native-lambda-router</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
@@ -28,6 +29,7 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\native-lambda-router-icon.png" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>
