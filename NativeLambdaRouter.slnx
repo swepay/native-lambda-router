@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/01 - Library/">
+    <Project Path="src/NativeLambdaRouter/NativeLambdaRouter.csproj" />
+  </Folder>
+  <Folder Name="/99 - Tests/">
+    <Project Path="tests/NativeLambdaRouter.Tests/NativeLambdaRouter.Tests.csproj" />
+  </Folder>
+</Solution>
