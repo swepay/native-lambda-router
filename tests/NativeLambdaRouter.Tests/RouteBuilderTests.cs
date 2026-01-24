@@ -119,10 +119,9 @@ public class RouteBuilderTests
         var builder = new RouteBuilder();
 
         // Act
-        builder
-            .MapGet<TestCommand, TestResponse>("/items", ctx => new TestCommand("get"))
-            .MapPost<TestCommand, TestResponse>("/items", ctx => new TestCommand("post"))
-            .MapDelete<TestCommand, TestResponse>("/items/{id}", ctx => new TestCommand("delete"));
+        builder.MapGet<TestCommand, TestResponse>("/items", ctx => new TestCommand("get"));
+        builder.MapPost<TestCommand, TestResponse>("/items", ctx => new TestCommand("post"));
+        builder.MapDelete<TestCommand, TestResponse>("/items/{id}", ctx => new TestCommand("delete"));
 
         // Assert
         builder.Routes.Should().HaveCount(3);
