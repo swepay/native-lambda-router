@@ -12,7 +12,8 @@ A high-performance API Gateway routing library for AWS Lambda, optimized for **N
 - 📦 **Path Parameters** - Extract parameters from URLs like `/items/{id}`
 - ❤️ **Health Checks** - Built-in `/health` and `/healthz` endpoints
 - ⚠️ **Error Handling** - Automatic HTTP status codes for common exceptions
-- 🔐 **JWT Claims** - Access authenticated user claims from route context
+- 🔐 **Authorization** - Fluent authorization with policies, roles, and claims
+- 🎫 **JWT Claims** - Access authenticated user claims from route context
 - 🎯 **NativeMediator Integration** - Seamless integration with CQRS pattern
 
 ## Installation
@@ -131,6 +132,103 @@ routes.MapPatch<TCommand, TResponse>(path, commandFactory);
 // Custom method
 routes.Map<TCommand, TResponse>(method, path, commandFactory, requiresAuth: true);
 ```
+
+## Authorization
+
+NativeLambdaRouter provides a fluent authorization API inspired by ASP.NET Core Minimal APIs.
+
+### Defining Policies
+
+Override `ConfigureAuthorization` to define named policies:
+
+```csharp
+protected override void ConfigureAuthorization(AuthorizationBuilder auth)
+{
+    auth.AddPolicy("admin_greetings", policy =>
+        policy
+            .RequireRole("admin")
+            .RequireClaim("scope", "greetings_api"));
+    
+    auth.AddPolicy("api_access", policy =>
+        policy
+            .RequireClaim("scope", "api:read", "api:write")
+            .RequireAssertion(ctx => ctx.Headers.ContainsKey("X-Api-Key")));
+}
+```
+
+### Applying Authorization to Routes
+
+Use fluent methods to apply authorization requirements:
+
+```csharp
+protected override void ConfigureRoutes(IRouteBuilder routes)
+{
+    // Require a named policy
+    routes.MapPut<UpdateItemCommand, UpdateItemResponse>(
+            "/items/{id}",
+            ctx => new UpdateItemCommand(
+                ctx.PathParameters["id"],
+                JsonSerializer.Deserialize<UpdateItemRequest>(ctx.Body!)!))
+        .RequireAuthorization("admin_greetings");
+    
+    // Require specific roles
+    routes.MapDelete<DeleteItemCommand, DeleteItemResponse>(
+            "/items/{id}",
+            ctx => new DeleteItemCommand(ctx.PathParameters["id"]))
+        .RequireRole("admin", "superuser");
+    
+    // Require specific claims
+    routes.MapPost<CreateItemCommand, CreateItemResponse>(
+            "/items",
+            ctx => JsonSerializer.Deserialize<CreateItemCommand>(ctx.Body!)!)
+        .RequireClaim("scope", "items:write");
+    
+    // Allow anonymous access (bypass authorization)
+    routes.MapGet<GetPublicDataCommand, GetPublicDataResponse>(
+            "/public",
+            ctx => new GetPublicDataCommand())
+        .AllowAnonymous();
+    
+    // Combine multiple requirements
+    routes.MapPatch<PatchItemCommand, PatchItemResponse>(
+            "/items/{id}",
+            ctx => new PatchItemCommand(ctx.PathParameters["id"]))
+        .RequireAuthorization("api_access")
+        .RequireRole("editor")
+        .RequireClaim("department", "engineering");
+}
+```
+
+### Authorization Methods
+
+| Method | Description |
+|--------|-------------|
+| `.RequireAuthorization(policies...)` | Requires authentication and optionally specific policies |
+| `.RequireRole(roles...)` | Requires the user to have at least one of the specified roles |
+| `.RequireClaim(type, values...)` | Requires a claim with one of the specified values |
+| `.AllowAnonymous()` | Bypasses all authorization checks |
+
+### Policy Builder Methods
+
+| Method | Description |
+|--------|-------------|
+| `.RequireRole(roles...)` | User must have at least one of these roles |
+| `.RequireClaim(type)` | User must have this claim (any value) |
+| `.RequireClaim(type, values...)` | User must have this claim with one of these values |
+| `.RequireAssertion(func)` | Custom authorization logic via delegate |
+
+### Role Claim Support
+
+The authorization system automatically checks these claim types for roles:
+- `role`
+- `roles`
+- `cognito:groups` (AWS Cognito)
+- `groups`
+
+Roles can be in various formats:
+- Single value: `"admin"`
+- Comma-separated: `"admin,user"`
+- JSON array: `["admin","user"]`
 
 ## Error Handling
 

@@ -15,6 +15,7 @@ public abstract class RoutedApiGatewayFunction
     private readonly IMediator _mediator;
     private readonly RouteMatcher _routeMatcher;
     private readonly JsonSerializerOptions? _jsonOptions;
+    private readonly AuthorizationService _authorizationService;
 
     private static readonly Dictionary<string, string> _jsonContentTypeHeader = new()
     {
@@ -39,6 +40,30 @@ public abstract class RoutedApiGatewayFunction
         var builder = new RouteBuilder();
         ConfigureRoutes(builder);
         _routeMatcher = new RouteMatcher(builder.Routes);
+
+        var authBuilder = new AuthorizationBuilder();
+        ConfigureAuthorization(authBuilder);
+        _authorizationService = new AuthorizationService(authBuilder.Policies);
+    }
+
+    /// <summary>
+    /// Override this method to configure authorization policies.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// protected override void ConfigureAuthorization(AuthorizationBuilder auth)
+    /// {
+    ///     auth.AddPolicy("admin_only", policy => policy
+    ///         .RequireRole("admin"));
+    ///
+    ///     auth.AddPolicy("api_access", policy => policy
+    ///         .RequireClaim("scope", "api:read", "api:write"));
+    /// }
+    /// </code>
+    /// </example>
+    protected virtual void ConfigureAuthorization(AuthorizationBuilder auth)
+    {
+        // Default: no policies configured
     }
 
     /// <summary>
@@ -145,6 +170,31 @@ public abstract class RoutedApiGatewayFunction
 
             // Build route context
             var routeContext = BuildRouteContext(request, match);
+
+            // Validate authorization
+            var authResult = _authorizationService.Authorize(routeContext, match.Route.AuthorizationOptions);
+            if (!authResult.Succeeded)
+            {
+                // Determine if it's 401 (not authenticated) or 403 (not authorized)
+                if (routeContext.Claims.Count == 0)
+                {
+                    context.Logger.LogWarning($"Unauthorized: {authResult.FailureMessage}");
+                    return CreateJsonResponse(HttpStatusCode.Unauthorized, new
+                    {
+                        Error = "Unauthorized",
+                        Details = authResult.FailureMessage
+                    });
+                }
+                else
+                {
+                    context.Logger.LogWarning($"Forbidden: {authResult.FailureMessage}");
+                    return CreateJsonResponse(HttpStatusCode.Forbidden, new
+                    {
+                        Error = "Forbidden",
+                        Details = authResult.FailureMessage
+                    });
+                }
+            }
 
             // Execute command via abstract method (implementation handles type safety)
             var result = await ExecuteCommandAsync(match, routeContext);

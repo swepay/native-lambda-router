@@ -34,7 +34,13 @@ public sealed class RouteDefinition
     /// <summary>
     /// Whether this route requires authentication. Default is true.
     /// </summary>
+    [Obsolete("Use AuthorizationOptions instead. This property will be removed in a future version.")]
     public bool RequiresAuth { get; init; } = true;
+
+    /// <summary>
+    /// Authorization options for this route.
+    /// </summary>
+    public RouteAuthorizationOptions AuthorizationOptions { get; init; } = new();
 }
 
 /// <summary>

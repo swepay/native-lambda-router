@@ -22,7 +22,7 @@ public interface IRouteBuilder
     /// <summary>
     /// Maps a GET request to a command.
     /// </summary>
-    IRouteBuilder MapGet<TCommand, TResponse>(
+    IRouteEndpointBuilder MapGet<TCommand, TResponse>(
         string path,
         Func<RouteContext, TCommand> commandFactory)
         where TCommand : notnull;
@@ -30,7 +30,7 @@ public interface IRouteBuilder
     /// <summary>
     /// Maps a POST request to a command.
     /// </summary>
-    IRouteBuilder MapPost<TCommand, TResponse>(
+    IRouteEndpointBuilder MapPost<TCommand, TResponse>(
         string path,
         Func<RouteContext, TCommand> commandFactory)
         where TCommand : notnull;
@@ -38,7 +38,7 @@ public interface IRouteBuilder
     /// <summary>
     /// Maps a PUT request to a command.
     /// </summary>
-    IRouteBuilder MapPut<TCommand, TResponse>(
+    IRouteEndpointBuilder MapPut<TCommand, TResponse>(
         string path,
         Func<RouteContext, TCommand> commandFactory)
         where TCommand : notnull;
@@ -46,7 +46,7 @@ public interface IRouteBuilder
     /// <summary>
     /// Maps a DELETE request to a command.
     /// </summary>
-    IRouteBuilder MapDelete<TCommand, TResponse>(
+    IRouteEndpointBuilder MapDelete<TCommand, TResponse>(
         string path,
         Func<RouteContext, TCommand> commandFactory)
         where TCommand : notnull;
@@ -54,7 +54,7 @@ public interface IRouteBuilder
     /// <summary>
     /// Maps a PATCH request to a command.
     /// </summary>
-    IRouteBuilder MapPatch<TCommand, TResponse>(
+    IRouteEndpointBuilder MapPatch<TCommand, TResponse>(
         string path,
         Func<RouteContext, TCommand> commandFactory)
         where TCommand : notnull;
@@ -62,7 +62,7 @@ public interface IRouteBuilder
     /// <summary>
     /// Maps a custom HTTP method to a command.
     /// </summary>
-    IRouteBuilder Map<TCommand, TResponse>(
+    IRouteEndpointBuilder Map<TCommand, TResponse>(
         string method,
         string path,
         Func<RouteContext, TCommand> commandFactory,
@@ -83,67 +83,81 @@ public sealed partial class RouteBuilder : IRouteBuilder
     public IReadOnlyList<RouteDefinition> Routes => _routes;
 
     /// <inheritdoc />
-    public IRouteBuilder MapGet<TCommand, TResponse>(
+    public IRouteEndpointBuilder MapGet<TCommand, TResponse>(
         string path,
         Func<RouteContext, TCommand> commandFactory)
         where TCommand : notnull
         => Map<TCommand, TResponse>(HttpMethod.GET, path, commandFactory);
 
     /// <inheritdoc />
-    public IRouteBuilder MapPost<TCommand, TResponse>(
+    public IRouteEndpointBuilder MapPost<TCommand, TResponse>(
         string path,
         Func<RouteContext, TCommand> commandFactory)
         where TCommand : notnull
         => Map<TCommand, TResponse>(HttpMethod.POST, path, commandFactory);
 
     /// <inheritdoc />
-    public IRouteBuilder MapPut<TCommand, TResponse>(
+    public IRouteEndpointBuilder MapPut<TCommand, TResponse>(
         string path,
         Func<RouteContext, TCommand> commandFactory)
         where TCommand : notnull
         => Map<TCommand, TResponse>(HttpMethod.PUT, path, commandFactory);
 
     /// <inheritdoc />
-    public IRouteBuilder MapDelete<TCommand, TResponse>(
+    public IRouteEndpointBuilder MapDelete<TCommand, TResponse>(
         string path,
         Func<RouteContext, TCommand> commandFactory)
         where TCommand : notnull
         => Map<TCommand, TResponse>(HttpMethod.DELETE, path, commandFactory);
 
     /// <inheritdoc />
-    public IRouteBuilder MapPatch<TCommand, TResponse>(
+    public IRouteEndpointBuilder MapPatch<TCommand, TResponse>(
         string path,
         Func<RouteContext, TCommand> commandFactory)
         where TCommand : notnull
         => Map<TCommand, TResponse>(HttpMethod.PATCH, path, commandFactory);
 
     /// <inheritdoc />
-    public IRouteBuilder Map<TCommand, TResponse>(
+    public IRouteEndpointBuilder Map<TCommand, TResponse>(
         string method,
         string path,
         Func<RouteContext, TCommand> commandFactory,
         bool requiresAuth = true)
         where TCommand : notnull
     {
-        _routes.Add(new RouteDefinition
+        var route = new RouteDefinition
         {
             Method = method.ToUpperInvariant(),
             Path = NormalizePath(path),
             CommandFactory = ctx => commandFactory(ctx),
             ResponseType = typeof(TResponse),
+#pragma warning disable CS0618 // Type or member is obsolete
             RequiresAuth = requiresAuth
-        });
+#pragma warning restore CS0618
+        };
 
-        return this;
+        // Sync legacy RequiresAuth with new AuthorizationOptions
+        if (requiresAuth)
+        {
+            route.AuthorizationOptions.RequiresAuthentication = true;
+        }
+
+        _routes.Add(route);
+
+        return new RouteEndpointBuilder(route);
     }
 
     private static string NormalizePath(string path)
     {
         path = path.Trim();
         if (!path.StartsWith('/'))
+        {
             path = "/" + path;
+        }
         if (path.EndsWith('/') && path.Length > 1)
+        {
             path = path[..^1];
+        }
         return path.ToLowerInvariant();
     }
 }
