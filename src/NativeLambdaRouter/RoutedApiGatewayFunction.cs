@@ -1,7 +1,7 @@
 using System.Net;
-using System.Text.Json;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.Lambda.Core;
+using Microsoft.Extensions.DependencyInjection;
 using NativeMediator;
 
 namespace NativeLambdaRouter;
@@ -12,9 +12,9 @@ namespace NativeLambdaRouter;
 /// </summary>
 public abstract class RoutedApiGatewayFunction
 {
-    private readonly IMediator _mediator;
+    private readonly IMediator? _mediator;
+    private readonly IServiceProvider? _serviceProvider;
     private readonly RouteMatcher _routeMatcher;
-    private readonly JsonSerializerOptions? _jsonOptions;
     private readonly AuthorizationService _authorizationService;
 
     private static readonly Dictionary<string, string> _jsonContentTypeHeader = new()
@@ -24,18 +24,21 @@ public abstract class RoutedApiGatewayFunction
 
     /// <summary>
     /// The mediator instance for sending commands.
+    /// When using IServiceProvider constructor, this returns a scoped mediator 
+    /// that should only be accessed within the request context.
     /// </summary>
-    protected IMediator Mediator => _mediator;
+    protected IMediator Mediator => _mediator ?? throw new InvalidOperationException(
+        "Mediator is not available. Use GetScopedMediator() with the IServiceProvider constructor.");
 
     /// <summary>
-    /// Creates a new routed API Gateway function.
+    /// Creates a new routed API Gateway function with a pre-configured mediator.
+    /// Use this constructor when IMediator is registered as Singleton.
     /// </summary>
     /// <param name="mediator">The mediator for handling commands.</param>
-    /// <param name="jsonOptions">Optional JSON serializer options for Native AOT compatibility.</param>
-    protected RoutedApiGatewayFunction(IMediator mediator, JsonSerializerOptions? jsonOptions = null)
+    protected RoutedApiGatewayFunction(IMediator mediator)
     {
         _mediator = mediator;
-        _jsonOptions = jsonOptions;
+        _serviceProvider = null;
 
         var builder = new RouteBuilder();
         ConfigureRoutes(builder);
@@ -44,6 +47,45 @@ public abstract class RoutedApiGatewayFunction
         var authBuilder = new AuthorizationBuilder();
         ConfigureAuthorization(authBuilder);
         _authorizationService = new AuthorizationService(authBuilder.Policies);
+    }
+
+    /// <summary>
+    /// Creates a new routed API Gateway function with a service provider.
+    /// Use this constructor when IMediator is registered as Scoped.
+    /// The mediator will be resolved within a scope for each request.
+    /// </summary>
+    /// <param name="serviceProvider">The service provider for resolving dependencies.</param>
+    protected RoutedApiGatewayFunction(IServiceProvider serviceProvider)
+    {
+        _mediator = null;
+        _serviceProvider = serviceProvider;
+
+        var builder = new RouteBuilder();
+        ConfigureRoutes(builder);
+        _routeMatcher = new RouteMatcher(builder.Routes);
+
+        var authBuilder = new AuthorizationBuilder();
+        ConfigureAuthorization(authBuilder);
+        _authorizationService = new AuthorizationService(authBuilder.Policies);
+    }
+
+    /// <summary>
+    /// Gets whether this function uses a service provider for scoped resolution.
+    /// </summary>
+    protected bool UsesScopedMediator => _serviceProvider != null;
+
+    /// <summary>
+    /// Creates a new scope and returns the scoped mediator.
+    /// The caller is responsible for disposing the scope.
+    /// </summary>
+    protected (IServiceScope scope, IMediator mediator) CreateScopedMediator()
+    {
+        if (_serviceProvider == null)
+            throw new InvalidOperationException("ServiceProvider is not available. Use the IServiceProvider constructor.");
+
+        var scope = _serviceProvider.CreateScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+        return (scope, mediator);
     }
 
     /// <summary>
@@ -83,46 +125,60 @@ public abstract class RoutedApiGatewayFunction
     /// <summary>
     /// Override this method to handle the matched route and execute the command.
     /// This is where you call the mediator with the specific command type.
+    /// The mediator instance is provided to ensure proper scoping of dependencies.
     /// </summary>
     /// <example>
     /// <code>
-    /// protected override async Task&lt;object&gt; ExecuteCommandAsync(RouteMatch match, RouteContext context)
+    /// protected override async Task&lt;object&gt; ExecuteCommandAsync(RouteMatch match, RouteContext context, IMediator mediator)
     /// {
     ///     var command = match.Route.CommandFactory(context);
     ///     return command switch
     ///     {
-    ///         GetItemsCommand cmd => await Mediator.Send(cmd),
-    ///         CreateItemCommand cmd => await Mediator.Send(cmd),
+    ///         GetItemsCommand cmd => await mediator.Send(cmd),
+    ///         CreateItemCommand cmd => await mediator.Send(cmd),
     ///         _ => throw new InvalidOperationException($"Unknown command: {command.GetType().Name}")
     ///     };
     /// }
     /// </code>
     /// </example>
-    protected abstract Task<object> ExecuteCommandAsync(RouteMatch match, RouteContext context);
+    protected abstract Task<object> ExecuteCommandAsync(RouteMatch match, RouteContext context, IMediator mediator);
 
     /// <summary>
     /// Override this method to provide custom JSON serialization for Native AOT.
     /// Use source-generated JSON serializer context for AOT compatibility.
     /// </summary>
-    protected virtual string SerializeResponse(object response)
-    {
-        if (_jsonOptions != null)
-            return JsonSerializer.Serialize(response, response.GetType(), _jsonOptions);
-
-        return JsonSerializer.Serialize(response);
-    }
+    /// <remarks>
+    /// You MUST override this method to provide AOT-compatible serialization.
+    /// Use a JsonSerializerContext with [JsonSerializable] attributes for all response types.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// protected override string SerializeResponse(object response)
+    /// {
+    ///     return response switch
+    ///     {
+    ///         GetItemsResponse r => JsonSerializer.Serialize(r, AppJsonContext.Default.GetItemsResponse),
+    ///         CreateItemResponse r => JsonSerializer.Serialize(r, AppJsonContext.Default.CreateItemResponse),
+    ///         ErrorResponse r => JsonSerializer.Serialize(r, RouterJsonContext.Default.ErrorResponse),
+    ///         HealthCheckResponse r => JsonSerializer.Serialize(r, RouterJsonContext.Default.HealthCheckResponse),
+    ///         _ => throw new NotSupportedException($"No serializer for {response.GetType().Name}")
+    ///     };
+    /// }
+    /// </code>
+    /// </example>
+    protected abstract string SerializeResponse(object response);
 
     /// <summary>
     /// Override to provide custom health check response.
     /// </summary>
-    protected virtual object GetHealthCheckResponse()
+    protected virtual HealthCheckResponse GetHealthCheckResponse()
     {
-        return new
+        return new HealthCheckResponse
         {
             Status = "healthy",
             Function = GetType().Name,
             Timestamp = DateTime.UtcNow.ToString("o"),
-            Environment = Environment.GetEnvironmentVariable("ENVIRONMENT") ?? "unknown"
+            Environment = System.Environment.GetEnvironmentVariable("ENVIRONMENT") ?? "unknown"
         };
     }
 
@@ -160,7 +216,7 @@ public abstract class RoutedApiGatewayFunction
             var match = _routeMatcher.Match(method, path);
             if (match == null)
             {
-                return CreateJsonResponse(HttpStatusCode.NotFound, new
+                return CreateJsonResponse(HttpStatusCode.NotFound, new RouteNotFoundResponse
                 {
                     Error = "Route not found",
                     Path = path,
@@ -179,7 +235,7 @@ public abstract class RoutedApiGatewayFunction
                 if (routeContext.Claims.Count == 0)
                 {
                     context.Logger.LogWarning($"Unauthorized: {authResult.FailureMessage}");
-                    return CreateJsonResponse(HttpStatusCode.Unauthorized, new
+                    return CreateJsonResponse(HttpStatusCode.Unauthorized, new ErrorResponse
                     {
                         Error = "Unauthorized",
                         Details = authResult.FailureMessage
@@ -188,7 +244,7 @@ public abstract class RoutedApiGatewayFunction
                 else
                 {
                     context.Logger.LogWarning($"Forbidden: {authResult.FailureMessage}");
-                    return CreateJsonResponse(HttpStatusCode.Forbidden, new
+                    return CreateJsonResponse(HttpStatusCode.Forbidden, new ErrorResponse
                     {
                         Error = "Forbidden",
                         Details = authResult.FailureMessage
@@ -197,14 +253,34 @@ public abstract class RoutedApiGatewayFunction
             }
 
             // Execute command via abstract method (implementation handles type safety)
-            var result = await ExecuteCommandAsync(match, routeContext);
+            IServiceScope? scope = null;
+            IMediator mediator;
+            
+            try
+            {
+                if (_serviceProvider != null)
+                {
+                    scope = _serviceProvider.CreateScope();
+                    mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+                }
+                else
+                {
+                    mediator = _mediator!;
+                }
 
-            return CreateJsonResponse(HttpStatusCode.OK, result);
+                var result = await ExecuteCommandAsync(match, routeContext, mediator);
+
+                return CreateJsonResponse(HttpStatusCode.OK, result);
+            }
+            finally
+            {
+                scope?.Dispose();
+            }
         }
         catch (ValidationException ex)
         {
             context.Logger.LogWarning($"Validation error: {ex.Message}");
-            return CreateJsonResponse(HttpStatusCode.BadRequest, new
+            return CreateJsonResponse(HttpStatusCode.BadRequest, new ErrorResponse
             {
                 Error = "Validation failed",
                 Details = ex.Message
@@ -213,7 +289,7 @@ public abstract class RoutedApiGatewayFunction
         catch (NotFoundException ex)
         {
             context.Logger.LogWarning($"Not found: {ex.Message}");
-            return CreateJsonResponse(HttpStatusCode.NotFound, new
+            return CreateJsonResponse(HttpStatusCode.NotFound, new ErrorResponse
             {
                 Error = "Resource not found",
                 Details = ex.Message
@@ -222,7 +298,7 @@ public abstract class RoutedApiGatewayFunction
         catch (UnauthorizedException ex)
         {
             context.Logger.LogWarning($"Unauthorized: {ex.Message}");
-            return CreateJsonResponse(HttpStatusCode.Unauthorized, new
+            return CreateJsonResponse(HttpStatusCode.Unauthorized, new ErrorResponse
             {
                 Error = "Unauthorized",
                 Details = ex.Message
@@ -231,7 +307,7 @@ public abstract class RoutedApiGatewayFunction
         catch (ForbiddenException ex)
         {
             context.Logger.LogWarning($"Forbidden: {ex.Message}");
-            return CreateJsonResponse(HttpStatusCode.Forbidden, new
+            return CreateJsonResponse(HttpStatusCode.Forbidden, new ErrorResponse
             {
                 Error = "Forbidden",
                 Details = ex.Message
@@ -240,7 +316,7 @@ public abstract class RoutedApiGatewayFunction
         catch (ConflictException ex)
         {
             context.Logger.LogWarning($"Conflict: {ex.Message}");
-            return CreateJsonResponse(HttpStatusCode.Conflict, new
+            return CreateJsonResponse(HttpStatusCode.Conflict, new ErrorResponse
             {
                 Error = "Conflict",
                 Details = ex.Message
@@ -249,7 +325,7 @@ public abstract class RoutedApiGatewayFunction
         catch (Exception ex)
         {
             context.Logger.LogError($"Error in {GetType().Name}: {ex.Message}");
-            return CreateJsonResponse(HttpStatusCode.InternalServerError, new
+            return CreateJsonResponse(HttpStatusCode.InternalServerError, new ErrorResponse
             {
                 Error = "Internal server error",
                 Details = ex.Message

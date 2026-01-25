@@ -27,13 +27,15 @@ dotnet add package NativeLambdaRouter
 ### 1. Create your Lambda Function
 
 ```csharp
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using NativeLambdaRouter;
 using NativeMediator;
 
 public class Function : RoutedApiGatewayFunction
 {
     public Function(IMediator mediator)
-        : base(mediator, JsonSerializerContext.Default.Options)
+        : base(mediator)
     {
     }
 
@@ -52,14 +54,14 @@ public class Function : RoutedApiGatewayFunction
         // POST /items - Create new item
         routes.MapPost<CreateItemCommand, CreateItemResponse>(
             "/items",
-            ctx => JsonSerializer.Deserialize<CreateItemCommand>(ctx.Body!)!);
+            ctx => JsonSerializer.Deserialize(ctx.Body!, AppJsonContext.Default.CreateItemCommand)!);
 
         // PUT /items/{id} - Update item
         routes.MapPut<UpdateItemCommand, UpdateItemResponse>(
             "/items/{id}",
             ctx => new UpdateItemCommand(
                 ctx.PathParameters["id"],
-                JsonSerializer.Deserialize<UpdateItemRequest>(ctx.Body!)!));
+                JsonSerializer.Deserialize(ctx.Body!, AppJsonContext.Default.UpdateItemRequest)!));
 
         // DELETE /items/{id} - Delete item
         routes.MapDelete<DeleteItemCommand, DeleteItemResponse>(
@@ -69,21 +71,55 @@ public class Function : RoutedApiGatewayFunction
 
     protected override async Task<object> ExecuteCommandAsync(
         RouteMatch match,
-        RouteContext context)
+        RouteContext context,
+        IMediator mediator)
     {
         var command = match.Route.CommandFactory(context);
 
         return command switch
         {
-            GetItemsCommand cmd => await Mediator.Send(cmd),
-            GetItemByIdCommand cmd => await Mediator.Send(cmd),
-            CreateItemCommand cmd => await Mediator.Send(cmd),
-            UpdateItemCommand cmd => await Mediator.Send(cmd),
-            DeleteItemCommand cmd => await Mediator.Send(cmd),
+            GetItemsCommand cmd => await mediator.Send(cmd),
+            GetItemByIdCommand cmd => await mediator.Send(cmd),
+            CreateItemCommand cmd => await mediator.Send(cmd),
+            UpdateItemCommand cmd => await mediator.Send(cmd),
+            DeleteItemCommand cmd => await mediator.Send(cmd),
             _ => throw new InvalidOperationException($"Unknown command: {command.GetType().Name}")
         };
     }
+
+    // Required for Native AOT - serialize all response types
+    protected override string SerializeResponse(object response)
+    {
+        return response switch
+        {
+            GetItemsResponse r => JsonSerializer.Serialize(r, AppJsonContext.Default.GetItemsResponse),
+            GetItemByIdResponse r => JsonSerializer.Serialize(r, AppJsonContext.Default.GetItemByIdResponse),
+            CreateItemResponse r => JsonSerializer.Serialize(r, AppJsonContext.Default.CreateItemResponse),
+            UpdateItemResponse r => JsonSerializer.Serialize(r, AppJsonContext.Default.UpdateItemResponse),
+            DeleteItemResponse r => JsonSerializer.Serialize(r, AppJsonContext.Default.DeleteItemResponse),
+            // Router internal types
+            ErrorResponse r => JsonSerializer.Serialize(r, RouterJsonContext.Default.ErrorResponse),
+            HealthCheckResponse r => JsonSerializer.Serialize(r, RouterJsonContext.Default.HealthCheckResponse),
+            RouteNotFoundResponse r => JsonSerializer.Serialize(r, RouterJsonContext.Default.RouteNotFoundResponse),
+            _ => throw new NotSupportedException($"No serializer for {response.GetType().Name}")
+        };
+    }
 }
+
+// Source-generated JSON context for AOT compatibility
+[JsonSerializable(typeof(GetItemsCommand))]
+[JsonSerializable(typeof(GetItemsResponse))]
+[JsonSerializable(typeof(GetItemByIdCommand))]
+[JsonSerializable(typeof(GetItemByIdResponse))]
+[JsonSerializable(typeof(CreateItemCommand))]
+[JsonSerializable(typeof(CreateItemResponse))]
+[JsonSerializable(typeof(UpdateItemCommand))]
+[JsonSerializable(typeof(UpdateItemRequest))]
+[JsonSerializable(typeof(UpdateItemResponse))]
+[JsonSerializable(typeof(DeleteItemCommand))]
+[JsonSerializable(typeof(DeleteItemResponse))]
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+public partial class AppJsonContext : JsonSerializerContext { }
 ```
 
 ## Architecture
@@ -119,6 +155,38 @@ The `RouteContext` provides access to request information:
 | `QueryParameters` | `Dictionary<string, string>` | Query string parameters |
 | `Headers` | `Dictionary<string, string>` | Request headers |
 | `Claims` | `Dictionary<string, string>` | JWT claims (when authenticated) |
+
+## Dependency Injection
+
+### Singleton Mediator
+
+Use this constructor when `IMediator` is registered as Singleton:
+
+```csharp
+public class Function : RoutedApiGatewayFunction
+{
+    public Function(IMediator mediator)
+        : base(mediator)
+    {
+    }
+}
+```
+
+### Scoped Mediator
+
+Use this constructor when `IMediator` is registered as Scoped (recommended for database contexts):
+
+```csharp
+public class Function : RoutedApiGatewayFunction
+{
+    public Function(IServiceProvider serviceProvider)
+        : base(serviceProvider)
+    {
+    }
+}
+```
+
+The mediator is automatically resolved within a scope for each request and passed to `ExecuteCommandAsync`.
 
 ## HTTP Methods
 
@@ -279,32 +347,63 @@ Built-in health check endpoints respond to `/health` and `/healthz`:
 Customize the health check response:
 
 ```csharp
-protected override object GetHealthCheckResponse()
+protected override HealthCheckResponse GetHealthCheckResponse()
 {
-    return new
+    return new HealthCheckResponse
     {
         Status = "healthy",
-        Version = "1.0.0",
-        Dependencies = new { Database = "ok", Cache = "ok" }
+        Function = GetType().Name,
+        Timestamp = DateTime.UtcNow.ToString("o"),
+        Environment = Environment.GetEnvironmentVariable("ENVIRONMENT") ?? "unknown"
     };
 }
 ```
 
+> **Note:** If you need custom properties in your health check, create your own response type,
+> add it to your `JsonSerializerContext`, and handle it in `SerializeResponse`.
+
 ## Native AOT Serialization
 
-For Native AOT compatibility, override `SerializeResponse`:
+The `SerializeResponse` method is **abstract** and must be implemented for Native AOT compatibility.
+Use source-generated `JsonSerializerContext` for all response types:
 
 ```csharp
 protected override string SerializeResponse(object response)
 {
     return response switch
     {
-        GetItemsResponse r => JsonSerializer.Serialize(r, JsonSerializerContext.Default.GetItemsResponse),
-        GetItemByIdResponse r => JsonSerializer.Serialize(r, JsonSerializerContext.Default.GetItemByIdResponse),
-        _ => JsonSerializer.Serialize(response, JsonSerializerContext.Default.Object)
+        // Your application response types
+        GetItemsResponse r => JsonSerializer.Serialize(r, AppJsonContext.Default.GetItemsResponse),
+        GetItemByIdResponse r => JsonSerializer.Serialize(r, AppJsonContext.Default.GetItemByIdResponse),
+        CreateItemResponse r => JsonSerializer.Serialize(r, AppJsonContext.Default.CreateItemResponse),
+        
+        // Router internal types (always include these)
+        ErrorResponse r => JsonSerializer.Serialize(r, RouterJsonContext.Default.ErrorResponse),
+        HealthCheckResponse r => JsonSerializer.Serialize(r, RouterJsonContext.Default.HealthCheckResponse),
+        RouteNotFoundResponse r => JsonSerializer.Serialize(r, RouterJsonContext.Default.RouteNotFoundResponse),
+        
+        _ => throw new NotSupportedException($"No serializer for {response.GetType().Name}")
     };
 }
+
+// Define your JSON context with all types
+[JsonSerializable(typeof(GetItemsResponse))]
+[JsonSerializable(typeof(GetItemByIdResponse))]
+[JsonSerializable(typeof(CreateItemCommand))]
+// ... add all your types
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+public partial class AppJsonContext : JsonSerializerContext { }
 ```
+
+### Router JSON Context
+
+NativeLambdaRouter provides `RouterJsonContext` with pre-configured serialization for:
+
+| Type | Description |
+|------|-------------|
+| `ErrorResponse` | Standard error responses (400, 401, 403, 404, 409, 500) |
+| `HealthCheckResponse` | Health check endpoint response |
+| `RouteNotFoundResponse` | 404 route not found response |
 
 ## Requirements
 
