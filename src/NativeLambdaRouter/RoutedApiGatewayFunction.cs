@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.Lambda.Core;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,7 +24,7 @@ public abstract class RoutedApiGatewayFunction
 
     /// <summary>
     /// The mediator instance for sending commands.
-    /// When using IServiceProvider constructor, this returns a scoped mediator 
+    /// When using IServiceProvider constructor, this returns a scoped mediator
     /// that should only be accessed within the request context.
     /// </summary>
     protected IMediator Mediator => _mediator ?? throw new InvalidOperationException(
@@ -202,6 +202,16 @@ public abstract class RoutedApiGatewayFunction
         var path = request.RawPath?.ToLowerInvariant() ?? "/";
         var method = request.RequestContext?.Http?.Method?.ToUpperInvariant() ?? "GET";
 
+        // Remove stage prefix if present (when using named stages like 'hml' or 'prd')
+        // API Gateway HTTP APIs include the stage name in RawPath when not using $default stage
+        var stage = request.RequestContext?.Stage;
+        if (!string.IsNullOrEmpty(stage) && stage != "$default" && path.StartsWith($"/{stage}", StringComparison.OrdinalIgnoreCase))
+        {
+            path = path.Substring(stage.Length + 1); // +1 for the leading slash
+            if (string.IsNullOrEmpty(path))
+                path = "/";
+        }
+
         context.Logger.LogInformation($"{GetType().Name}: {method} {path}");
 
         // Health check endpoint (always available without auth)
@@ -255,7 +265,7 @@ public abstract class RoutedApiGatewayFunction
             // Execute command via abstract method (implementation handles type safety)
             IServiceScope? scope = null;
             IMediator mediator;
-            
+
             try
             {
                 if (_serviceProvider != null)
