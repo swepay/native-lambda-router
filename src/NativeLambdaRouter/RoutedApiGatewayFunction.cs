@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.Lambda.Core;
 using Microsoft.Extensions.DependencyInjection;
@@ -199,6 +199,7 @@ public abstract class RoutedApiGatewayFunction
         APIGatewayHttpApiV2ProxyRequest request,
         ILambdaContext context)
     {
+        RouteDefinition? matchedRoute = null;
         var path = request.RawPath?.ToLowerInvariant() ?? "/";
         var method = request.RequestContext?.Http?.Method?.ToUpperInvariant() ?? "GET";
 
@@ -234,6 +235,8 @@ public abstract class RoutedApiGatewayFunction
                 });
             }
 
+            matchedRoute = match.Route;
+
             // Build route context
             var routeContext = BuildRouteContext(request, match);
 
@@ -245,20 +248,20 @@ public abstract class RoutedApiGatewayFunction
                 if (routeContext.Claims.Count == 0)
                 {
                     context.Logger.LogWarning($"Unauthorized: {authResult.FailureMessage}");
-                    return CreateJsonResponse(HttpStatusCode.Unauthorized, new ErrorResponse
+                    return CreateResponse(HttpStatusCode.Unauthorized, new ErrorResponse
                     {
                         Error = "Unauthorized",
                         Details = authResult.FailureMessage
-                    });
+                    }, matchedRoute);
                 }
                 else
                 {
                     context.Logger.LogWarning($"Forbidden: {authResult.FailureMessage}");
-                    return CreateJsonResponse(HttpStatusCode.Forbidden, new ErrorResponse
+                    return CreateResponse(HttpStatusCode.Forbidden, new ErrorResponse
                     {
                         Error = "Forbidden",
                         Details = authResult.FailureMessage
-                    });
+                    }, matchedRoute);
                 }
             }
 
@@ -280,7 +283,17 @@ public abstract class RoutedApiGatewayFunction
 
                 var result = await ExecuteCommandAsync(match, routeContext, mediator);
 
-                return CreateJsonResponse(HttpStatusCode.OK, result);
+                if (result is APIGatewayHttpApiV2ProxyResponse apiGatewayResponse)
+                {
+                    return apiGatewayResponse;
+                }
+
+                if (result is ApiGatewayResponse customResponse)
+                {
+                    return CreateApiGatewayResponse(customResponse);
+                }
+
+                return CreateResponse(HttpStatusCode.OK, result, match.Route);
             }
             finally
             {
@@ -290,56 +303,56 @@ public abstract class RoutedApiGatewayFunction
         catch (ValidationException ex)
         {
             context.Logger.LogWarning($"Validation error: {ex.Message}");
-            return CreateJsonResponse(HttpStatusCode.BadRequest, new ErrorResponse
+            return CreateResponse(HttpStatusCode.BadRequest, new ErrorResponse
             {
                 Error = "Validation failed",
                 Details = ex.Message
-            });
+            }, matchedRoute);
         }
         catch (NotFoundException ex)
         {
             context.Logger.LogWarning($"Not found: {ex.Message}");
-            return CreateJsonResponse(HttpStatusCode.NotFound, new ErrorResponse
+            return CreateResponse(HttpStatusCode.NotFound, new ErrorResponse
             {
                 Error = "Resource not found",
                 Details = ex.Message
-            });
+            }, matchedRoute);
         }
         catch (UnauthorizedException ex)
         {
             context.Logger.LogWarning($"Unauthorized: {ex.Message}");
-            return CreateJsonResponse(HttpStatusCode.Unauthorized, new ErrorResponse
+            return CreateResponse(HttpStatusCode.Unauthorized, new ErrorResponse
             {
                 Error = "Unauthorized",
                 Details = ex.Message
-            });
+            }, matchedRoute);
         }
         catch (ForbiddenException ex)
         {
             context.Logger.LogWarning($"Forbidden: {ex.Message}");
-            return CreateJsonResponse(HttpStatusCode.Forbidden, new ErrorResponse
+            return CreateResponse(HttpStatusCode.Forbidden, new ErrorResponse
             {
                 Error = "Forbidden",
                 Details = ex.Message
-            });
+            }, matchedRoute);
         }
         catch (ConflictException ex)
         {
             context.Logger.LogWarning($"Conflict: {ex.Message}");
-            return CreateJsonResponse(HttpStatusCode.Conflict, new ErrorResponse
+            return CreateResponse(HttpStatusCode.Conflict, new ErrorResponse
             {
                 Error = "Conflict",
                 Details = ex.Message
-            });
+            }, matchedRoute);
         }
         catch (Exception ex)
         {
             context.Logger.LogError($"Error in {GetType().Name}: {ex.Message}");
-            return CreateJsonResponse(HttpStatusCode.InternalServerError, new ErrorResponse
+            return CreateResponse(HttpStatusCode.InternalServerError, new ErrorResponse
             {
                 Error = "Internal server error",
                 Details = ex.Message
-            });
+            }, matchedRoute);
         }
     }
 
@@ -384,11 +397,65 @@ public abstract class RoutedApiGatewayFunction
         };
     }
 
-    private APIGatewayHttpApiV2ProxyResponse CreateJsonResponse(HttpStatusCode statusCode, object body) =>
-        new()
+    private APIGatewayHttpApiV2ProxyResponse CreateJsonResponse(HttpStatusCode statusCode, object body)
+    {
+        return new APIGatewayHttpApiV2ProxyResponse
         {
             StatusCode = (int)statusCode,
             Body = SerializeResponse(body),
             Headers = _jsonContentTypeHeader
         };
+    }
+
+    private APIGatewayHttpApiV2ProxyResponse CreateResponse(
+        HttpStatusCode statusCode,
+        object body,
+        RouteDefinition? route)
+    {
+        var headers = BuildHeaders(route);
+        return new APIGatewayHttpApiV2ProxyResponse
+        {
+            StatusCode = (int)statusCode,
+            Body = SerializeResponse(body),
+            Headers = headers
+        };
+    }
+
+    private static APIGatewayHttpApiV2ProxyResponse CreateApiGatewayResponse(ApiGatewayResponse response)
+    {
+        return new APIGatewayHttpApiV2ProxyResponse
+        {
+            StatusCode = response.StatusCode,
+            Body = response.Body,
+            Headers = response.Headers ?? new Dictionary<string, string>(),
+            IsBase64Encoded = response.IsBase64Encoded
+        };
+    }
+
+    private static Dictionary<string, string> BuildHeaders(RouteDefinition? route)
+    {
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (route is not null)
+        {
+            foreach (var pair in route.ResponseHeaders)
+            {
+                headers[pair.Key] = pair.Value;
+            }
+        }
+
+        if (!headers.ContainsKey("Content-Type"))
+        {
+            if (route?.ResponseContentType is not null)
+            {
+                headers["Content-Type"] = route.ResponseContentType;
+            }
+            else
+            {
+                headers["Content-Type"] = "application/json";
+            }
+        }
+
+        return headers;
+    }
 }

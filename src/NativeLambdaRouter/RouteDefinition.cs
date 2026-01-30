@@ -32,6 +32,16 @@ public sealed class RouteDefinition
     public Func<object, object>? ResponseTransformer { get; init; }
 
     /// <summary>
+    /// Optional response content type for this route (e.g., text/html).
+    /// </summary>
+    public string? ResponseContentType { get; set; }
+
+    /// <summary>
+    /// Optional response headers for this route.
+    /// </summary>
+    public Dictionary<string, string> ResponseHeaders { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Whether this route requires authentication. Default is true.
     /// </summary>
     [Obsolete("Use AuthorizationOptions instead. This property will be removed in a future version.")]

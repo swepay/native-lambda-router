@@ -15,6 +15,8 @@ A high-performance API Gateway routing library for AWS Lambda, optimized for **N
 - 🔐 **Authorization** - Fluent authorization with policies, roles, and claims
 - 🎫 **JWT Claims** - Access authenticated user claims from route context
 - 🎯 **NativeMediator Integration** - Seamless integration with CQRS pattern
+- 🧾 **Per-route Content-Type** - HTML/YAML or custom headers per endpoint
+- 🧩 **Custom API Gateway Response** - Fallback response with custom headers
 
 ## Installation
 
@@ -67,6 +69,11 @@ public class Function : RoutedApiGatewayFunction
         routes.MapDelete<DeleteItemCommand, DeleteItemResponse>(
             "/items/{id}",
             ctx => new DeleteItemCommand(ctx.PathParameters["id"]));
+
+        // HTML / YAML example
+        routes.MapGet<GetDocsCommand, GetDocsResponse>("/docs", _ => new GetDocsCommand())
+            .Produces("text/html")
+            .WithHeader("Cache-Control", "no-store");
     }
 
     protected override async Task<object> ExecuteCommandAsync(
@@ -92,6 +99,7 @@ public class Function : RoutedApiGatewayFunction
     {
         return response switch
         {
+            GetDocsResponse r => r.Html,
             GetItemsResponse r => JsonSerializer.Serialize(r, AppJsonContext.Default.GetItemsResponse),
             GetItemByIdResponse r => JsonSerializer.Serialize(r, AppJsonContext.Default.GetItemByIdResponse),
             CreateItemResponse r => JsonSerializer.Serialize(r, AppJsonContext.Default.CreateItemResponse),
@@ -120,6 +128,34 @@ public class Function : RoutedApiGatewayFunction
 [JsonSerializable(typeof(DeleteItemResponse))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 public partial class AppJsonContext : JsonSerializerContext { }
+```
+
+### Custom API Gateway Response (fallback)
+
+```csharp
+protected override async Task<object> ExecuteCommandAsync(
+    RouteMatch match,
+    RouteContext context,
+    IMediator mediator)
+{
+    var command = match.Route.CommandFactory(context);
+
+    return command switch
+    {
+        GetDocsCommand cmd => new ApiGatewayResponse
+        {
+            StatusCode = 200,
+            Body = "<html>...</html>",
+            Headers = new Dictionary<string, string>
+            {
+                ["Content-Type"] = "text/html"
+            }
+        },
+        GetItemsCommand cmd => await mediator.Send(cmd),
+        CreateItemCommand cmd => await mediator.Send(cmd),
+        _ => throw new InvalidOperationException($"Unknown command: {command.GetType().Name}")
+    };
+}
 ```
 
 ## Architecture

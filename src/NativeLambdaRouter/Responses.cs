@@ -75,6 +75,32 @@ public sealed class RouteNotFoundResponse
 }
 
 /// <summary>
+/// Custom API Gateway response for advanced scenarios (headers, status code).
+/// </summary>
+public sealed class ApiGatewayResponse
+{
+    /// <summary>
+    /// The HTTP status code.
+    /// </summary>
+    public int StatusCode { get; init; }
+
+    /// <summary>
+    /// The raw response body.
+    /// </summary>
+    public string Body { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Optional response headers.
+    /// </summary>
+    public Dictionary<string, string>? Headers { get; init; }
+
+    /// <summary>
+    /// Indicates whether the body is base64-encoded.
+    /// </summary>
+    public bool IsBase64Encoded { get; init; }
+}
+
+/// <summary>
 /// JSON serializer context for NativeLambdaRouter internal types.
 /// This context provides AOT-compatible serialization for error responses
 /// and health check responses.
