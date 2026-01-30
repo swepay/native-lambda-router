@@ -182,6 +182,34 @@ public class RouteBuilderTests
         command.Should().BeOfType<TestCommand>();
         ((TestCommand)command).Value.Should().Be("test-body");
     }
+
+    [Fact]
+    public void Produces_ShouldSetResponseContentType()
+    {
+        // Arrange
+        var builder = new RouteBuilder();
+
+        // Act
+        builder.MapGet<TestCommand, TestResponse>("/docs", ctx => new TestCommand("test"))
+            .Produces("text/html");
+
+        // Assert
+        builder.Routes[0].ResponseContentType.Should().Be("text/html");
+    }
+
+    [Fact]
+    public void WithHeader_ShouldAddResponseHeader()
+    {
+        // Arrange
+        var builder = new RouteBuilder();
+
+        // Act
+        builder.MapGet<TestCommand, TestResponse>("/docs", ctx => new TestCommand("test"))
+            .WithHeader("X-Docs", "enabled");
+
+        // Assert
+        builder.Routes[0].ResponseHeaders["X-Docs"].Should().Be("enabled");
+    }
 }
 
 // Test types

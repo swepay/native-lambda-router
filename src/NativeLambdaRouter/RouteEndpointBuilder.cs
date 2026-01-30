@@ -33,6 +33,21 @@ public interface IRouteEndpointBuilder
     /// </summary>
     /// <returns>The endpoint builder for further configuration.</returns>
     IRouteEndpointBuilder AllowAnonymous();
+
+    /// <summary>
+    /// Sets the response content type for this endpoint.
+    /// </summary>
+    /// <param name="contentType">The content type (e.g., text/html).</param>
+    /// <returns>The endpoint builder for further configuration.</returns>
+    IRouteEndpointBuilder Produces(string contentType);
+
+    /// <summary>
+    /// Adds a response header for this endpoint.
+    /// </summary>
+    /// <param name="name">The header name.</param>
+    /// <param name="value">The header value.</param>
+    /// <returns>The endpoint builder for further configuration.</returns>
+    IRouteEndpointBuilder WithHeader(string name, string value);
 }
 
 /// <summary>
@@ -81,6 +96,23 @@ internal sealed class RouteEndpointBuilder : IRouteEndpointBuilder
     {
         _route.AuthorizationOptions.AllowAnonymous = true;
         _route.AuthorizationOptions.RequiresAuthentication = false;
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IRouteEndpointBuilder Produces(string contentType)
+    {
+        ArgumentNullException.ThrowIfNull(contentType);
+        _route.ResponseContentType = contentType;
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IRouteEndpointBuilder WithHeader(string name, string value)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(value);
+        _route.ResponseHeaders[name] = value;
         return this;
     }
 }
