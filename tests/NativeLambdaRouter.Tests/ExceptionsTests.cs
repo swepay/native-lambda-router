@@ -9,7 +9,7 @@ public class ExceptionsTests
         var exception = new ValidationException("Field is required");
 
         // Assert
-        exception.Message.Should().Be("Field is required");
+        exception.Message.ShouldBe("Field is required");
     }
 
     [Fact]
@@ -22,7 +22,7 @@ public class ExceptionsTests
         var exception = new ValidationException("Validation failed", innerException);
 
         // Assert
-        exception.InnerException.Should().Be(innerException);
+        exception.InnerException.ShouldBe(innerException);
     }
 
     [Fact]
@@ -32,7 +32,7 @@ public class ExceptionsTests
         var exception = new NotFoundException("Item not found");
 
         // Assert
-        exception.Message.Should().Be("Item not found");
+        exception.Message.ShouldBe("Item not found");
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public class ExceptionsTests
         var exception = new NotFoundException("Not found", innerException);
 
         // Assert
-        exception.InnerException.Should().Be(innerException);
+        exception.InnerException.ShouldBe(innerException);
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public class ExceptionsTests
         var exception = new UnauthorizedException("Invalid token");
 
         // Assert
-        exception.Message.Should().Be("Invalid token");
+        exception.Message.ShouldBe("Invalid token");
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public class ExceptionsTests
         var exception = new UnauthorizedException("Unauthorized", innerException);
 
         // Assert
-        exception.InnerException.Should().Be(innerException);
+        exception.InnerException.ShouldBe(innerException);
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public class ExceptionsTests
         var exception = new ForbiddenException("Access denied");
 
         // Assert
-        exception.Message.Should().Be("Access denied");
+        exception.Message.ShouldBe("Access denied");
     }
 
     [Fact]
@@ -91,7 +91,7 @@ public class ExceptionsTests
         var exception = new ForbiddenException("Forbidden", innerException);
 
         // Assert
-        exception.InnerException.Should().Be(innerException);
+        exception.InnerException.ShouldBe(innerException);
     }
 
     [Fact]
@@ -101,7 +101,7 @@ public class ExceptionsTests
         var exception = new ConflictException("Resource already exists");
 
         // Assert
-        exception.Message.Should().Be("Resource already exists");
+        exception.Message.ShouldBe("Resource already exists");
     }
 
     [Fact]
@@ -114,6 +114,6 @@ public class ExceptionsTests
         var exception = new ConflictException("Conflict", innerException);
 
         // Assert
-        exception.InnerException.Should().Be(innerException);
+        exception.InnerException.ShouldBe(innerException);
     }
 }

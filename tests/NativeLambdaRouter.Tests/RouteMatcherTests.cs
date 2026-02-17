@@ -12,7 +12,7 @@ public class RouteMatcherTests
         var result = matcher.Match("GET", "/items");
 
         // Assert
-        result.Should().BeNull();
+        result.ShouldBeNull();
     }
 
     [Fact]
@@ -29,7 +29,7 @@ public class RouteMatcherTests
         var result = matcher.Match("GET", "/items");
 
         // Assert
-        result.Should().BeNull();
+        result.ShouldBeNull();
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public class RouteMatcherTests
         var result = matcher.Match("GET", "/products");
 
         // Assert
-        result.Should().BeNull();
+        result.ShouldBeNull();
     }
 
     [Fact]
@@ -63,8 +63,8 @@ public class RouteMatcherTests
         var result = matcher.Match("GET", "/items");
 
         // Assert
-        result.Should().NotBeNull();
-        result!.Route.Path.Should().Be("/items");
+        result.ShouldNotBeNull();
+        result!.Route.Path.ShouldBe("/items");
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public class RouteMatcherTests
         var result = matcher.Match("get", "/items");
 
         // Assert
-        result.Should().NotBeNull();
+        result.ShouldNotBeNull();
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class RouteMatcherTests
         var result = matcher.Match("GET", "/ITEMS");
 
         // Assert
-        result.Should().NotBeNull();
+        result.ShouldNotBeNull();
     }
 
     [Fact]
@@ -115,9 +115,9 @@ public class RouteMatcherTests
         var result = matcher.Match("GET", "/items/123");
 
         // Assert
-        result.Should().NotBeNull();
-        result!.PathParameters.Should().ContainKey("id");
-        result.PathParameters["id"].Should().Be("123");
+        result.ShouldNotBeNull();
+        result!.PathParameters.ShouldContainKey("id");
+        result.PathParameters["id"].ShouldBe("123");
     }
 
     [Fact]
@@ -134,11 +134,49 @@ public class RouteMatcherTests
         var result = matcher.Match("GET", "/users/user-123/orders/order-456");
 
         // Assert
-        result.Should().NotBeNull();
-        result!.PathParameters.Should().HaveCount(2);
-        // Note: Parameter names are lowercased due to path normalization
-        result.PathParameters["userid"].Should().Be("user-123");
-        result.PathParameters["orderid"].Should().Be("order-456");
+        result.ShouldNotBeNull();
+        result!.PathParameters.Count.ShouldBe(2);
+        // Parameter names are lowercased from the route template normalization
+        result.PathParameters["userid"].ShouldBe("user-123");
+        result.PathParameters["orderid"].ShouldBe("order-456");
+    }
+
+    [Fact]
+    public void Match_ShouldPreservePathParameterCase()
+    {
+        // Arrange
+        var routes = new List<RouteDefinition>
+        {
+            CreateRoute(HttpMethod.GET, "/realms/{realmId}/.well-known/openid-configuration")
+        };
+        var matcher = new RouteMatcher(routes);
+
+        // Act
+        var result = matcher.Match("GET", "/realms/Master/.well-known/openid-configuration");
+
+        // Assert
+        result.ShouldNotBeNull();
+        result!.PathParameters["realmid"].ShouldBe("Master");
+    }
+
+    [Fact]
+    public void Match_ShouldPreservePathParameterCase_WithMixedCaseValues()
+    {
+        // Arrange
+        var routes = new List<RouteDefinition>
+        {
+            CreateRoute(HttpMethod.GET, "/api/{tenantName}/users/{userId}")
+        };
+        var matcher = new RouteMatcher(routes);
+
+        // Act
+        var result = matcher.Match("GET", "/api/MyTenant/users/User-ABC-123");
+
+        // Assert
+        result.ShouldNotBeNull();
+        result!.PathParameters.Count.ShouldBe(2);
+        result.PathParameters["tenantname"].ShouldBe("MyTenant");
+        result.PathParameters["userid"].ShouldBe("User-ABC-123");
     }
 
     [Fact]
@@ -155,7 +193,7 @@ public class RouteMatcherTests
         var result = matcher.Match("GET", "/items/");
 
         // Assert
-        result.Should().NotBeNull();
+        result.ShouldNotBeNull();
     }
 
     [Fact]
@@ -172,7 +210,7 @@ public class RouteMatcherTests
         var result = matcher.Match("GET", "items");
 
         // Assert
-        result.Should().NotBeNull();
+        result.ShouldNotBeNull();
     }
 
     [Fact]
@@ -190,8 +228,8 @@ public class RouteMatcherTests
         var result = matcher.Match("GET", "/items");
 
         // Assert
-        result.Should().NotBeNull();
-        ((TestCommand)result!.Route.CommandFactory(new RouteContext())).Value.Should().Be("first");
+        result.ShouldNotBeNull();
+        ((TestCommand)result!.Route.CommandFactory(new RouteContext())).Value.ShouldBe("first");
     }
 
     [Fact]
@@ -208,7 +246,7 @@ public class RouteMatcherTests
         var result = matcher.Match("GET", "/items/extra");
 
         // Assert
-        result.Should().BeNull();
+        result.ShouldBeNull();
     }
 
     [Fact]
@@ -225,7 +263,7 @@ public class RouteMatcherTests
         var result = matcher.Match("GET", "/");
 
         // Assert
-        result.Should().NotBeNull();
+        result.ShouldNotBeNull();
     }
 
     [Fact]
@@ -242,9 +280,9 @@ public class RouteMatcherTests
         var result = matcher.Match("GET", "/api/v1/products/prod-123/details");
 
         // Assert
-        result.Should().NotBeNull();
-        result!.PathParameters["resource"].Should().Be("products");
-        result.PathParameters["id"].Should().Be("prod-123");
+        result.ShouldNotBeNull();
+        result!.PathParameters["resource"].ShouldBe("products");
+        result.PathParameters["id"].ShouldBe("prod-123");
     }
 
     private static RouteDefinition CreateRoute(string method, string path, string commandValue = "test")

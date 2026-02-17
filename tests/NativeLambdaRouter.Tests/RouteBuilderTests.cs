@@ -12,9 +12,9 @@ public class RouteBuilderTests
         builder.MapGet<TestCommand, TestResponse>("/items", ctx => new TestCommand("test"));
 
         // Assert
-        builder.Routes.Should().HaveCount(1);
-        builder.Routes[0].Method.Should().Be(HttpMethod.GET);
-        builder.Routes[0].Path.Should().Be("/items");
+        builder.Routes.Count.ShouldBe(1);
+        builder.Routes[0].Method.ShouldBe(HttpMethod.GET);
+        builder.Routes[0].Path.ShouldBe("/items");
     }
 
     [Fact]
@@ -27,8 +27,8 @@ public class RouteBuilderTests
         builder.MapPost<TestCommand, TestResponse>("/items", ctx => new TestCommand("test"));
 
         // Assert
-        builder.Routes.Should().HaveCount(1);
-        builder.Routes[0].Method.Should().Be(HttpMethod.POST);
+        builder.Routes.Count.ShouldBe(1);
+        builder.Routes[0].Method.ShouldBe(HttpMethod.POST);
     }
 
     [Fact]
@@ -41,8 +41,8 @@ public class RouteBuilderTests
         builder.MapPut<TestCommand, TestResponse>("/items/{id}", ctx => new TestCommand("test"));
 
         // Assert
-        builder.Routes.Should().HaveCount(1);
-        builder.Routes[0].Method.Should().Be(HttpMethod.PUT);
+        builder.Routes.Count.ShouldBe(1);
+        builder.Routes[0].Method.ShouldBe(HttpMethod.PUT);
     }
 
     [Fact]
@@ -55,8 +55,8 @@ public class RouteBuilderTests
         builder.MapDelete<TestCommand, TestResponse>("/items/{id}", ctx => new TestCommand("test"));
 
         // Assert
-        builder.Routes.Should().HaveCount(1);
-        builder.Routes[0].Method.Should().Be(HttpMethod.DELETE);
+        builder.Routes.Count.ShouldBe(1);
+        builder.Routes[0].Method.ShouldBe(HttpMethod.DELETE);
     }
 
     [Fact]
@@ -69,8 +69,8 @@ public class RouteBuilderTests
         builder.MapPatch<TestCommand, TestResponse>("/items/{id}", ctx => new TestCommand("test"));
 
         // Assert
-        builder.Routes.Should().HaveCount(1);
-        builder.Routes[0].Method.Should().Be(HttpMethod.PATCH);
+        builder.Routes.Count.ShouldBe(1);
+        builder.Routes[0].Method.ShouldBe(HttpMethod.PATCH);
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public class RouteBuilderTests
         builder.MapGet<TestCommand, TestResponse>("items", ctx => new TestCommand("test"));
 
         // Assert
-        builder.Routes[0].Path.Should().Be("/items");
+        builder.Routes[0].Path.ShouldBe("/items");
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public class RouteBuilderTests
         builder.MapGet<TestCommand, TestResponse>("/items/", ctx => new TestCommand("test"));
 
         // Assert
-        builder.Routes[0].Path.Should().Be("/items");
+        builder.Routes[0].Path.ShouldBe("/items");
     }
 
     [Fact]
@@ -109,7 +109,7 @@ public class RouteBuilderTests
         builder.MapGet<TestCommand, TestResponse>("/ITEMS", ctx => new TestCommand("test"));
 
         // Assert
-        builder.Routes[0].Path.Should().Be("/items");
+        builder.Routes[0].Path.ShouldBe("/items");
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public class RouteBuilderTests
         builder.MapDelete<TestCommand, TestResponse>("/items/{id}", ctx => new TestCommand("delete"));
 
         // Assert
-        builder.Routes.Should().HaveCount(3);
+        builder.Routes.Count.ShouldBe(3);
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public class RouteBuilderTests
         builder.MapGet<TestCommand, TestResponse>("/items", ctx => new TestCommand("test"));
 
         // Assert
-        builder.Routes[0].RequiresAuth.Should().BeTrue();
+        builder.Routes[0].RequiresAuth.ShouldBeTrue();
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public class RouteBuilderTests
         builder.Map<TestCommand, TestResponse>(HttpMethod.GET, "/public", ctx => new TestCommand("test"), requiresAuth: false);
 
         // Assert
-        builder.Routes[0].RequiresAuth.Should().BeFalse();
+        builder.Routes[0].RequiresAuth.ShouldBeFalse();
     }
 
     [Fact]
@@ -163,7 +163,7 @@ public class RouteBuilderTests
         builder.MapGet<TestCommand, TestResponse>("/items", ctx => new TestCommand("test"));
 
         // Assert
-        builder.Routes[0].ResponseType.Should().Be(typeof(TestResponse));
+        builder.Routes[0].ResponseType.ShouldBe(typeof(TestResponse));
     }
 
     [Fact]
@@ -179,8 +179,8 @@ public class RouteBuilderTests
         var command = builder.Routes[0].CommandFactory(context);
 
         // Assert
-        command.Should().BeOfType<TestCommand>();
-        ((TestCommand)command).Value.Should().Be("test-body");
+        command.ShouldBeOfType<TestCommand>();
+        ((TestCommand)command).Value.ShouldBe("test-body");
     }
 
     [Fact]
@@ -194,7 +194,7 @@ public class RouteBuilderTests
             .Produces("text/html");
 
         // Assert
-        builder.Routes[0].ResponseContentType.Should().Be("text/html");
+        builder.Routes[0].ResponseContentType.ShouldBe("text/html");
     }
 
     [Fact]
@@ -208,7 +208,7 @@ public class RouteBuilderTests
             .WithHeader("X-Docs", "enabled");
 
         // Assert
-        builder.Routes[0].ResponseHeaders["X-Docs"].Should().Be("enabled");
+        builder.Routes[0].ResponseHeaders["X-Docs"].ShouldBe("enabled");
     }
 }
 

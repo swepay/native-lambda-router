@@ -188,7 +188,10 @@ public abstract class RoutedApiGatewayFunction
     /// </summary>
     protected virtual bool IsHealthCheckPath(string path)
     {
-        return path is "/health" or "/health/" or "/healthz" or "/healthz/";
+        return string.Equals(path, "/health", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(path, "/health/", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(path, "/healthz", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(path, "/healthz/", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -200,7 +203,7 @@ public abstract class RoutedApiGatewayFunction
         ILambdaContext context)
     {
         RouteDefinition? matchedRoute = null;
-        var path = request.RawPath?.ToLowerInvariant() ?? "/";
+        var path = request.RawPath ?? "/";
         var method = request.RequestContext?.Http?.Method?.ToUpperInvariant() ?? "GET";
 
         // Remove stage prefix if present (when using named stages like 'hml' or 'prd')

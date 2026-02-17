@@ -1,4 +1,3 @@
-using FluentAssertions;
 
 namespace NativeLambdaRouter.Tests;
 
@@ -15,7 +14,7 @@ public class AuthorizationTests
             .RequireAuthorization();
 
         // Assert
-        builder.Routes[0].AuthorizationOptions.RequiresAuthentication.Should().BeTrue();
+        builder.Routes[0].AuthorizationOptions.RequiresAuthentication.ShouldBeTrue();
     }
 
     [Fact]
@@ -29,7 +28,7 @@ public class AuthorizationTests
             .RequireAuthorization("admin_only");
 
         // Assert
-        builder.Routes[0].AuthorizationOptions.PolicyNames.Should().Contain("admin_only");
+        builder.Routes[0].AuthorizationOptions.PolicyNames.ShouldContain("admin_only");
     }
 
     [Fact]
@@ -43,7 +42,7 @@ public class AuthorizationTests
             .RequireAuthorization("policy1", "policy2");
 
         // Assert
-        builder.Routes[0].AuthorizationOptions.PolicyNames.Should().BeEquivalentTo(["policy1", "policy2"]);
+        builder.Routes[0].AuthorizationOptions.PolicyNames.ShouldBe(["policy1", "policy2"]);
     }
 
     [Fact]
@@ -57,8 +56,8 @@ public class AuthorizationTests
             .RequireRole("admin", "superuser");
 
         // Assert
-        builder.Routes[0].AuthorizationOptions.Roles.Should().BeEquivalentTo(["admin", "superuser"]);
-        builder.Routes[0].AuthorizationOptions.RequiresAuthentication.Should().BeTrue();
+        builder.Routes[0].AuthorizationOptions.Roles.ShouldBe(["admin", "superuser"]);
+        builder.Routes[0].AuthorizationOptions.RequiresAuthentication.ShouldBeTrue();
     }
 
     [Fact]
@@ -72,8 +71,8 @@ public class AuthorizationTests
             .RequireClaim("scope", "api:read", "api:write");
 
         // Assert
-        builder.Routes[0].AuthorizationOptions.Claims.Should().ContainKey("scope");
-        builder.Routes[0].AuthorizationOptions.Claims["scope"].Should().BeEquivalentTo(["api:read", "api:write"]);
+        builder.Routes[0].AuthorizationOptions.Claims.ShouldContainKey("scope");
+        builder.Routes[0].AuthorizationOptions.Claims["scope"].ShouldBe(["api:read", "api:write"]);
     }
 
     [Fact]
@@ -87,8 +86,8 @@ public class AuthorizationTests
             .AllowAnonymous();
 
         // Assert
-        builder.Routes[0].AuthorizationOptions.AllowAnonymous.Should().BeTrue();
-        builder.Routes[0].AuthorizationOptions.RequiresAuthentication.Should().BeFalse();
+        builder.Routes[0].AuthorizationOptions.AllowAnonymous.ShouldBeTrue();
+        builder.Routes[0].AuthorizationOptions.RequiresAuthentication.ShouldBeFalse();
     }
 
     [Fact]
@@ -105,9 +104,9 @@ public class AuthorizationTests
 
         // Assert
         var options = builder.Routes[0].AuthorizationOptions;
-        options.PolicyNames.Should().Contain("admin_greetings");
-        options.Roles.Should().Contain("admin");
-        options.Claims["scope"].Should().Contain("greetings_api");
+        options.PolicyNames.ShouldContain("admin_greetings");
+        options.Roles.ShouldContain("admin");
+        options.Claims["scope"].ShouldContain("greetings_api");
     }
 
     [Fact]
@@ -122,7 +121,7 @@ public class AuthorizationTests
         var result = service.Authorize(context, options);
 
         // Assert
-        result.Succeeded.Should().BeTrue();
+        result.Succeeded.ShouldBeTrue();
     }
 
     [Fact]
@@ -137,8 +136,8 @@ public class AuthorizationTests
         var result = service.Authorize(context, options);
 
         // Assert
-        result.Succeeded.Should().BeFalse();
-        result.FailureMessage.Should().Contain("not authenticated");
+        result.Succeeded.ShouldBeFalse();
+        result.FailureMessage!.ShouldContain("not authenticated");
     }
 
     [Fact]
@@ -156,7 +155,7 @@ public class AuthorizationTests
         var result = service.Authorize(context, options);
 
         // Assert
-        result.Succeeded.Should().BeTrue();
+        result.Succeeded.ShouldBeTrue();
     }
 
     [Fact]
@@ -179,7 +178,7 @@ public class AuthorizationTests
         var result = service.Authorize(context, options);
 
         // Assert
-        result.Succeeded.Should().BeTrue();
+        result.Succeeded.ShouldBeTrue();
     }
 
     [Fact]
@@ -202,8 +201,8 @@ public class AuthorizationTests
         var result = service.Authorize(context, options);
 
         // Assert
-        result.Succeeded.Should().BeFalse();
-        result.FailureMessage.Should().Contain("admin");
+        result.Succeeded.ShouldBeFalse();
+        result.FailureMessage!.ShouldContain("admin");
     }
 
     [Fact]
@@ -226,7 +225,7 @@ public class AuthorizationTests
         var result = service.Authorize(context, options);
 
         // Assert
-        result.Succeeded.Should().BeTrue();
+        result.Succeeded.ShouldBeTrue();
     }
 
     [Fact]
@@ -254,7 +253,7 @@ public class AuthorizationTests
         var result = service.Authorize(context, options);
 
         // Assert
-        result.Succeeded.Should().BeTrue();
+        result.Succeeded.ShouldBeTrue();
     }
 
     [Fact]
@@ -282,7 +281,7 @@ public class AuthorizationTests
         var result = service.Authorize(context, options);
 
         // Assert
-        result.Succeeded.Should().BeFalse();
+        result.Succeeded.ShouldBeFalse();
     }
 
     [Fact]
@@ -298,10 +297,10 @@ public class AuthorizationTests
 
         // Assert
         var policy = builder.Policies["test_policy"];
-        policy.Name.Should().Be("test_policy");
-        policy.RequiredRoles.Should().BeEquivalentTo(["admin", "superuser"]);
-        policy.RequiredClaims["scope"].Should().BeEquivalentTo(["api:read", "api:write"]);
-        policy.Requirements.Should().HaveCount(1);
+        policy.Name.ShouldBe("test_policy");
+        policy.RequiredRoles.ShouldBe(["admin", "superuser"]);
+        policy.RequiredClaims["scope"].ShouldBe(["api:read", "api:write"]);
+        policy.Requirements.Count.ShouldBe(1);
     }
 
     [Fact]
@@ -324,7 +323,7 @@ public class AuthorizationTests
         var result = service.Authorize(context, options);
 
         // Assert
-        result.Succeeded.Should().BeTrue();
+        result.Succeeded.ShouldBeTrue();
     }
 
     private record TestCommand(string Value);

@@ -9,11 +9,11 @@ public class RouteContextTests
         var context = new RouteContext();
 
         // Assert
-        context.Body.Should().BeNull();
-        context.PathParameters.Should().BeEmpty();
-        context.QueryParameters.Should().BeEmpty();
-        context.Headers.Should().BeEmpty();
-        context.Claims.Should().BeEmpty();
+        context.Body.ShouldBeNull();
+        context.PathParameters.ShouldBeEmpty();
+        context.QueryParameters.ShouldBeEmpty();
+        context.Headers.ShouldBeEmpty();
+        context.Claims.ShouldBeEmpty();
     }
 
     [Fact]
@@ -23,7 +23,7 @@ public class RouteContextTests
         var context = new RouteContext { Body = "{\"name\":\"test\"}" };
 
         // Assert
-        context.Body.Should().Be("{\"name\":\"test\"}");
+        context.Body.ShouldBe("{\"name\":\"test\"}");
     }
 
     [Fact]
@@ -40,9 +40,9 @@ public class RouteContextTests
         };
 
         // Assert
-        context.PathParameters.Should().HaveCount(2);
-        context.PathParameters["id"].Should().Be("123");
-        context.PathParameters["name"].Should().Be("test");
+        context.PathParameters.Count.ShouldBe(2);
+        context.PathParameters["id"].ShouldBe("123");
+        context.PathParameters["name"].ShouldBe("test");
     }
 
     [Fact]
@@ -59,8 +59,8 @@ public class RouteContextTests
         };
 
         // Assert
-        context.QueryParameters.Should().HaveCount(2);
-        context.QueryParameters["page"].Should().Be("1");
+        context.QueryParameters.Count.ShouldBe(2);
+        context.QueryParameters["page"].ShouldBe("1");
     }
 
     [Fact]
@@ -77,8 +77,8 @@ public class RouteContextTests
         };
 
         // Assert
-        context.Headers.Should().HaveCount(2);
-        context.Headers["Authorization"].Should().Be("Bearer token");
+        context.Headers.Count.ShouldBe(2);
+        context.Headers["Authorization"].ShouldBe("Bearer token");
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public class RouteContextTests
         };
 
         // Assert
-        context.Claims.Should().HaveCount(2);
-        context.Claims["sub"].Should().Be("user-123");
+        context.Claims.Count.ShouldBe(2);
+        context.Claims["sub"].ShouldBe("user-123");
     }
 }

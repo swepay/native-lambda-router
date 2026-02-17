@@ -179,26 +179,40 @@ public sealed partial class RouteMatcher
 
     /// <summary>
     /// Finds a matching route for the given method and path.
+    /// Path matching is case-insensitive, but path parameter values
+    /// preserve the original casing from the request URL.
     /// </summary>
     public RouteMatch? Match(string method, string path)
     {
         method = method.ToUpperInvariant();
-        path = NormalizePath(path);
+        var normalizedPath = NormalizePath(path);
+        var originalPath = NormalizePathPreserveCase(path);
 
         foreach (var (route, pattern) in _compiledRoutes)
         {
             if (route.Method != method)
+            {
                 continue;
+            }
 
-            var match = pattern.Match(path);
+            var match = pattern.Match(normalizedPath);
             if (!match.Success)
+            {
                 continue;
+            }
 
+            // Re-match against the original-cased path to extract parameter values
+            // with their original casing preserved
+            var originalMatch = pattern.Match(originalPath);
             var pathParams = new Dictionary<string, string>();
             foreach (var groupName in pattern.GetGroupNames())
             {
-                if (groupName == "0") continue; // Skip the full match group
-                var group = match.Groups[groupName];
+                if (groupName == "0")
+                {
+                    continue; // Skip the full match group
+                }
+
+                var group = originalMatch.Groups[groupName];
                 if (group.Success)
                 {
                     pathParams[groupName] = group.Value;
@@ -223,10 +237,28 @@ public sealed partial class RouteMatcher
     {
         path = path.Trim();
         if (!path.StartsWith('/'))
+        {
             path = "/" + path;
+        }
         if (path.EndsWith('/') && path.Length > 1)
+        {
             path = path[..^1];
+        }
         return path.ToLowerInvariant();
+    }
+
+    private static string NormalizePathPreserveCase(string path)
+    {
+        path = path.Trim();
+        if (!path.StartsWith('/'))
+        {
+            path = "/" + path;
+        }
+        if (path.EndsWith('/') && path.Length > 1)
+        {
+            path = path[..^1];
+        }
+        return path;
     }
 
     [GeneratedRegex(@"\{(\w+)\}")]

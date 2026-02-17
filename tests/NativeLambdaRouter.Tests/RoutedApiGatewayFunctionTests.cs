@@ -59,9 +59,9 @@ public sealed class RoutedApiGatewayFunctionTests
 
         var response = await function.FunctionHandler(request, Substitute.For<ILambdaContext>());
 
-        response.Headers.Should().ContainKey("Content-Type").WhoseValue.Should().Be("text/html");
-        response.Body.Should().Be("<html>ok</html>");
-        response.Headers.Should().ContainKey("Cache-Control").WhoseValue.Should().Be("no-store");
+        response.Headers.ShouldContainKeyAndValue("Content-Type", "text/html");
+        response.Body.ShouldBe("<html>ok</html>");
+        response.Headers.ShouldContainKeyAndValue("Cache-Control", "no-store");
     }
 
     [Fact]
@@ -73,8 +73,8 @@ public sealed class RoutedApiGatewayFunctionTests
 
         var response = await function.FunctionHandler(request, Substitute.For<ILambdaContext>());
 
-        response.StatusCode.Should().Be(401);
-        response.Headers.Should().ContainKey("Content-Type").WhoseValue.Should().Be("text/html");
+        response.StatusCode.ShouldBe(401);
+        response.Headers.ShouldContainKeyAndValue("Content-Type", "text/html");
     }
 
     private static APIGatewayHttpApiV2ProxyRequest CreateRequest(string path, string method)
