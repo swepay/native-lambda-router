@@ -382,11 +382,26 @@ public abstract class RoutedApiGatewayFunction
         }
 
         var claims = new Dictionary<string, string>();
-        if (request.RequestContext?.Authorizer?.Jwt?.Claims != null)
+        var jwtClaims = request.RequestContext?.Authorizer?.Jwt?.Claims;
+        if (jwtClaims is not null && jwtClaims.Count > 0)
         {
-            foreach (var claim in request.RequestContext.Authorizer.Jwt.Claims)
+            foreach (var claim in jwtClaims)
             {
                 claims[claim.Key] = claim.Value;
+            }
+        }
+        else
+        {
+            var lambdaClaims = request.RequestContext?.Authorizer?.Lambda;
+            if (lambdaClaims is not null)
+            {
+                foreach (var kvp in lambdaClaims)
+                {
+                    if (kvp.Value is not null)
+                    {
+                        claims[kvp.Key] = kvp.Value.ToString() ?? "";
+                    }
+                }
             }
         }
 

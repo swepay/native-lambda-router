@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-02-20
+
+### Added
+
+- **Lambda Authorizer support (REQUEST type, payload format 2.0)**: `BuildRouteContext` now reads claims from `Authorizer.Lambda` (`Dictionary<string, object>`) when `Authorizer.Jwt.Claims` is null or empty. This enables support for API Gateway Lambda Authorizers with `EnableSimpleResponses: true`, which is required for multi-realm Identity Providers where the JWT issuer varies per realm.
+- Priority order: JWT Authorizer claims are preferred when both are present.
+- Lambda context values (`object`) are converted to `string` via `.ToString()` — safe for simple response format (strings, numbers, booleans).
+- Null values in the Lambda context are skipped.
+- All existing authorization features (`RequireRole`, `RequireClaim`, `RequireAssertion`, policies) work transparently with both authorizer types.
+
+### No Breaking Changes
+
+- `RouteContext.Claims` remains `Dictionary<string, string>`.
+- All existing JWT Authorizer behavior is unchanged.
+- No new public API surface — the fallback is automatic and internal.
+
+## [2.0.3] - 2026-02-17
+
+### Fixed
+
+- **Path parameter case preservation**: Path parameter values now preserve their original casing from the request URL. Previously, values were lowercased during path normalization (e.g., `/realms/Master` would yield `realmId = "master"` instead of `"Master"`).
+- **Health check path matching**: `IsHealthCheckPath` now uses case-insensitive comparison instead of relying on pre-lowercased input.
+
+### Changed
+
+- Replaced FluentAssertions with Shouldly in all test files.
+
 ## [2.0.0] - 2026-01-24
 
 ### ⚠️ Breaking Changes
