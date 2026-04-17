@@ -137,7 +137,9 @@ public class RouteBuilderTests
         builder.MapGet<TestCommand, TestResponse>("/items", ctx => new TestCommand("test"));
 
         // Assert
+#pragma warning disable CS0618 // Intentionally exercising the obsolete API.
         builder.Routes[0].RequiresAuth.ShouldBeTrue();
+#pragma warning restore CS0618
     }
 
     [Fact]
@@ -150,7 +152,9 @@ public class RouteBuilderTests
         builder.Map<TestCommand, TestResponse>(HttpMethod.GET, "/public", ctx => new TestCommand("test"), requiresAuth: false);
 
         // Assert
+#pragma warning disable CS0618 // Intentionally exercising the obsolete API.
         builder.Routes[0].RequiresAuth.ShouldBeFalse();
+#pragma warning restore CS0618
     }
 
     [Fact]
