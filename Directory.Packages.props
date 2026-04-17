@@ -1,6 +1,6 @@
 <Project>
 
-  <\!--
+  <!--
     Central Package Management (CPM) skeleton.
 
     ENABLE procedure:
@@ -20,7 +20,7 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
-  <\!-- === AWS Lambda === -->
+  <!-- === AWS Lambda === -->
   <ItemGroup>
     <PackageVersion Include="Amazon.Lambda.Core" Version="2.8.1" />
     <PackageVersion Include="Amazon.Lambda.APIGatewayEvents" Version="2.7.3" />
@@ -34,7 +34,7 @@
     <PackageVersion Include="AWSSDK.Core" Version="4.0.3.10" />
   </ItemGroup>
 
-  <\!-- === Microsoft.Extensions === -->
+  <!-- === Microsoft.Extensions === -->
   <ItemGroup>
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
@@ -43,14 +43,14 @@
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
   </ItemGroup>
 
-  <\!-- === Roslyn (source generators, analyzers) === -->
+  <!-- === Roslyn (source generators, analyzers) === -->
   <ItemGroup>
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.9.2" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.9.2" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" />
   </ItemGroup>
 
-  <\!-- === Swepay libs cross-reference === -->
+  <!-- === Swepay libs cross-reference === -->
   <ItemGroup>
     <PackageVersion Include="NativeMediator" Version="1.0.4" />
     <PackageVersion Include="NativeLambdaRouter" Version="2.1.0" />
@@ -58,7 +58,7 @@
     <PackageVersion Include="Native.FluentValidation.NativeLambdaMediator" Version="1.0.1" />
   </ItemGroup>
 
-  <\!-- === Test stack === -->
+  <!-- === Test stack === -->
   <ItemGroup>
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />
@@ -70,19 +70,19 @@
     <PackageVersion Include="Bogus" Version="35.6.1" />
   </ItemGroup>
 
-  <\!-- === Snapshot / Golden file testing (Onda 2 target) === -->
+  <!-- === Snapshot / Golden file testing (Onda 2 target) === -->
   <ItemGroup>
     <PackageVersion Include="Verify.Xunit" Version="28.3.2" />
     <PackageVersion Include="Verify.SourceGenerators" Version="2.4.0" />
   </ItemGroup>
 
-  <\!-- === Serialization / Parsers === -->
+  <!-- === Serialization / Parsers === -->
   <ItemGroup>
     <PackageVersion Include="YamlDotNet" Version="16.3.0" />
     <PackageVersion Include="FluentValidation" Version="11.10.0" />
   </ItemGroup>
 
-  <\!-- === Tooling === -->
+  <!-- === Tooling === -->
   <ItemGroup>
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
   </ItemGroup>
