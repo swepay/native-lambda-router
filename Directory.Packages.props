@@ -1,0 +1,90 @@
+<Project>
+
+  <\!--
+    Central Package Management (CPM) skeleton.
+
+    ENABLE procedure:
+    1. Verify every .csproj uses <PackageReference Include="X" /> WITHOUT `Version=`.
+    2. Flip <ManagePackageVersionsCentrally> to true in Directory.Build.props.
+    3. Run `dotnet restore` and `dotnet build` to confirm.
+
+    Until then, this file is an inert authoritative list of approved versions.
+    Add new packages here FIRST, then reference in csproj without version.
+
+    See: https://learn.microsoft.com/nuget/consume-packages/central-package-management
+
+    Implements F-DX-2 from GAPS_ROADMAP.md.
+  -->
+
+  <PropertyGroup>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <\!-- === AWS Lambda === -->
+  <ItemGroup>
+    <PackageVersion Include="Amazon.Lambda.Core" Version="2.8.1" />
+    <PackageVersion Include="Amazon.Lambda.APIGatewayEvents" Version="2.7.3" />
+    <PackageVersion Include="Amazon.Lambda.RuntimeSupport" Version="1.14.2" />
+    <PackageVersion Include="Amazon.Lambda.Serialization.SystemTextJson" Version="2.4.5" />
+    <PackageVersion Include="Amazon.Lambda.SNSEvents" Version="2.1.1" />
+    <PackageVersion Include="Amazon.Lambda.SQSEvents" Version="2.2.1" />
+    <PackageVersion Include="Amazon.Lambda.DynamoDBEvents" Version="3.1.2" />
+    <PackageVersion Include="Amazon.Lambda.CloudWatchEvents" Version="4.4.1" />
+    <PackageVersion Include="AWS.Lambda.Powertools.Parameters" Version="3.1.0" />
+    <PackageVersion Include="AWSSDK.Core" Version="4.0.3.10" />
+  </ItemGroup>
+
+  <\!-- === Microsoft.Extensions === -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
+  </ItemGroup>
+
+  <\!-- === Roslyn (source generators, analyzers) === -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.9.2" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.9.2" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" />
+  </ItemGroup>
+
+  <\!-- === Swepay libs cross-reference === -->
+  <ItemGroup>
+    <PackageVersion Include="NativeMediator" Version="1.0.4" />
+    <PackageVersion Include="NativeLambdaRouter" Version="2.1.0" />
+    <PackageVersion Include="Native.FluentValidation" Version="1.0.1" />
+    <PackageVersion Include="Native.FluentValidation.NativeLambdaMediator" Version="1.0.1" />
+  </ItemGroup>
+
+  <\!-- === Test stack === -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="NSubstitute" Version="5.3.0" />
+    <PackageVersion Include="Shouldly" Version="4.3.0" />
+    <PackageVersion Include="FluentAssertions" Version="7.1.0" />
+    <PackageVersion Include="Bogus" Version="35.6.1" />
+  </ItemGroup>
+
+  <\!-- === Snapshot / Golden file testing (Onda 2 target) === -->
+  <ItemGroup>
+    <PackageVersion Include="Verify.Xunit" Version="28.3.2" />
+    <PackageVersion Include="Verify.SourceGenerators" Version="2.4.0" />
+  </ItemGroup>
+
+  <\!-- === Serialization / Parsers === -->
+  <ItemGroup>
+    <PackageVersion Include="YamlDotNet" Version="16.3.0" />
+    <PackageVersion Include="FluentValidation" Version="11.10.0" />
+  </ItemGroup>
+
+  <\!-- === Tooling === -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>
