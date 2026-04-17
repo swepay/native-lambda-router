@@ -40,7 +40,7 @@
   </PropertyGroup>
 
   <!-- SourceLink for debugging published packages -->
-  <ItemGroup Condition="'$(IsPackable)' \!= 'false'">
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
   </ItemGroup>
 
