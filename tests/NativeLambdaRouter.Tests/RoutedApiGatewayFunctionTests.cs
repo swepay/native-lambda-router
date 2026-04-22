@@ -840,6 +840,95 @@ public sealed class RoutedApiGatewayFunctionTests
         response.StatusCode.ShouldBe(401);
     }
 
+    // --- TooManyRequestsException pipeline tests ---
+
+    private sealed class RateLimitedFunction : RoutedApiGatewayFunction
+    {
+        private readonly TooManyRequestsException _toThrow;
+
+        public RateLimitedFunction(IMediator mediator, TooManyRequestsException toThrow)
+            : base(mediator)
+        {
+            _toThrow = toThrow;
+        }
+
+        protected override void ConfigureRoutes(IRouteBuilder routes)
+        {
+            routes.MapGet<DocsCommand, DocsResponse>("/limited", _ => new DocsCommand())
+                .AllowAnonymous();
+        }
+
+        protected override Task<object> ExecuteCommandAsync(RouteMatch match, RouteContext context, IMediator mediator)
+        {
+            throw _toThrow;
+        }
+
+        protected override string SerializeResponse(object response)
+        {
+            return response switch
+            {
+                ErrorResponse r => JsonSerializer.Serialize(r, RouterJsonContext.Default.ErrorResponse),
+                _ => throw new NotSupportedException($"No serializer for {response.GetType().Name}")
+            };
+        }
+    }
+
+    [Fact]
+    public async Task TooManyRequests_WithRetryAfter_Returns429AndRetryAfterHeader()
+    {
+        // Arrange
+        var mediator = Substitute.For<IMediator>();
+        var function = new RateLimitedFunction(
+            mediator,
+            new TooManyRequestsException("Bucket caller:x exceeded", TimeSpan.FromSeconds(30)));
+        var request = CreateRequest("/limited", "GET");
+
+        // Act
+        var response = await function.FunctionHandler(request, Substitute.For<ILambdaContext>());
+
+        // Assert
+        response.StatusCode.ShouldBe(429);
+        response.Headers.ShouldContainKeyAndValue("Retry-After", "30");
+        response.Body.ShouldContain("Too many requests");
+        response.Body.ShouldContain("Bucket caller:x exceeded");
+    }
+
+    [Fact]
+    public async Task TooManyRequests_WithoutRetryAfter_Returns429AndNoRetryAfterHeader()
+    {
+        // Arrange
+        var mediator = Substitute.For<IMediator>();
+        var function = new RateLimitedFunction(
+            mediator,
+            new TooManyRequestsException("Rate limit exceeded"));
+        var request = CreateRequest("/limited", "GET");
+
+        // Act
+        var response = await function.FunctionHandler(request, Substitute.For<ILambdaContext>());
+
+        // Assert
+        response.StatusCode.ShouldBe(429);
+        response.Headers.ShouldNotContainKey("Retry-After");
+    }
+
+    [Fact]
+    public async Task TooManyRequests_SubSecondRetryAfter_IsRoundedUpToOneSecond()
+    {
+        // Arrange — tiny hints still round up to 1 so clients don't "retry immediately".
+        var mediator = Substitute.For<IMediator>();
+        var function = new RateLimitedFunction(
+            mediator,
+            new TooManyRequestsException("throttled", TimeSpan.FromMilliseconds(100)));
+        var request = CreateRequest("/limited", "GET");
+
+        // Act
+        var response = await function.FunctionHandler(request, Substitute.For<ILambdaContext>());
+
+        // Assert
+        response.StatusCode.ShouldBe(429);
+        response.Headers.ShouldContainKeyAndValue("Retry-After", "1");
+    }
+
     // --- Helpers ---
 
     private static APIGatewayHttpApiV2ProxyRequest CreateRequest(string path, string method)
