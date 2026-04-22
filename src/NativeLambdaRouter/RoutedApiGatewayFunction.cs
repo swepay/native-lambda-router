@@ -356,7 +356,7 @@ public abstract class RoutedApiGatewayFunction
                 Error = "Too many requests",
                 Details = ex.Message
             }, matchedRoute);
-            if (ex.RetryAfter is { } retryAfter)
+            if (ex.RetryAfter is { } retryAfter && retryAfter > TimeSpan.Zero)
             {
                 // RFC 7231 §7.1.3 — delta-seconds. Round up so a 0.1s hint still
                 // communicates "wait a bit" rather than "retry immediately".
