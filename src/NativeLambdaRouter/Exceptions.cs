@@ -113,7 +113,7 @@ public class TooManyRequestsException : Exception
     /// </summary>
     public TooManyRequestsException(string message, TimeSpan retryAfter) : base(message)
     {
-        RetryAfter = retryAfter;
+        RetryAfter = ValidateRetryAfter(retryAfter);
     }
 
     /// <summary>
@@ -128,6 +128,16 @@ public class TooManyRequestsException : Exception
     public TooManyRequestsException(string message, TimeSpan retryAfter, Exception innerException)
         : base(message, innerException)
     {
-        RetryAfter = retryAfter;
+        RetryAfter = ValidateRetryAfter(retryAfter);
+    }
+
+    private static TimeSpan ValidateRetryAfter(TimeSpan retryAfter)
+    {
+        if (retryAfter < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(retryAfter), retryAfter, "Retry-after must be greater than or equal to zero.");
+        }
+
+        return retryAfter;
     }
 }
