@@ -348,6 +348,23 @@ public abstract class RoutedApiGatewayFunction
                 Details = ex.Message
             }, matchedRoute);
         }
+        catch (TooManyRequestsException ex)
+        {
+            context.Logger.LogWarning($"Too many requests: {ex.Message}");
+            var response = CreateResponse(HttpStatusCode.TooManyRequests, new ErrorResponse
+            {
+                Error = "Too many requests",
+                Details = ex.Message
+            }, matchedRoute);
+            if (ex.RetryAfter is { } retryAfter && retryAfter > TimeSpan.Zero)
+            {
+                // RFC 7231 §7.1.3 — delta-seconds. Round up so a 0.1s hint still
+                // communicates "wait a bit" rather than "retry immediately".
+                var seconds = Math.Max(1, (long)Math.Ceiling(retryAfter.TotalSeconds));
+                response.Headers["Retry-After"] = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+            return response;
+        }
         catch (Exception ex)
         {
             context.Logger.LogError($"Error in {GetType().Name}: {ex.Message}");

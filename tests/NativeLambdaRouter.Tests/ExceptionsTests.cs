@@ -116,4 +116,54 @@ public class ExceptionsTests
         // Assert
         exception.InnerException.ShouldBe(innerException);
     }
+
+    [Fact]
+    public void TooManyRequestsException_ShouldStoreMessage()
+    {
+        // Act
+        var exception = new TooManyRequestsException("Rate limit exceeded");
+
+        // Assert
+        exception.Message.ShouldBe("Rate limit exceeded");
+        exception.RetryAfter.ShouldBeNull();
+    }
+
+    [Fact]
+    public void TooManyRequestsException_ShouldStoreRetryAfter()
+    {
+        // Act
+        var exception = new TooManyRequestsException("Rate limit exceeded", TimeSpan.FromSeconds(30));
+
+        // Assert
+        exception.Message.ShouldBe("Rate limit exceeded");
+        exception.RetryAfter.ShouldBe(TimeSpan.FromSeconds(30));
+    }
+
+    [Fact]
+    public void TooManyRequestsException_ShouldStoreInnerException()
+    {
+        // Arrange
+        var innerException = new InvalidOperationException("Inner error");
+
+        // Act
+        var exception = new TooManyRequestsException("Rate limit exceeded", innerException);
+
+        // Assert
+        exception.InnerException.ShouldBe(innerException);
+        exception.RetryAfter.ShouldBeNull();
+    }
+
+    [Fact]
+    public void TooManyRequestsException_ShouldStoreRetryAfterAndInnerException()
+    {
+        // Arrange
+        var innerException = new InvalidOperationException("Inner error");
+
+        // Act
+        var exception = new TooManyRequestsException("Rate limit exceeded", TimeSpan.FromSeconds(42), innerException);
+
+        // Assert
+        exception.InnerException.ShouldBe(innerException);
+        exception.RetryAfter.ShouldBe(TimeSpan.FromSeconds(42));
+    }
 }

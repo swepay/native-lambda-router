@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-04-22
+
+### Added
+
+- **HTTP 429 Too Many Requests support** via new `TooManyRequestsException`. When thrown from an `ExecuteCommandAsync` handler (or any downstream code), the router maps it to a `429` status code with an `ErrorResponse` body. This closes the last gap in the standard REST error palette the router exposes (was previously 400/401/403/404/409/500).
+- **`Retry-After` response header**: `TooManyRequestsException` accepts an optional `TimeSpan retryAfter` parameter. When present, the router emits `Retry-After: <seconds>` using delta-seconds per RFC 7231 §7.1.3, rounded up (minimum 1s so sub-second hints still signal "wait a bit" rather than "retry immediately"). When absent, no `Retry-After` header is emitted — callers relying on default client back-off are unaffected.
+
+### No Breaking Changes
+
+- Pure additive release: new exception class, new catch branch before the generic `Exception` handler. All existing exception-to-status mappings unchanged. `RoutedApiGatewayFunction`'s abstract surface unchanged.
+
 ## [2.1.0] - 2026-02-20
 
 ### Added
