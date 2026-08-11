@@ -1,3 +1,12 @@
+---
+name: developer
+archetype: support-library
+model: claude-sonnet-5
+tools: [Read, Write, Edit, Bash, Grep, Glob]
+description: >
+  Implemente features seguindo o shared kernel e as convenções de código.
+---
+
 # Developer Agent - native-lambda-router
 
 **Modelo:** Claude Sonnet 4  

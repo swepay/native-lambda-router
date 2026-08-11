@@ -1,3 +1,12 @@
+---
+name: qa
+archetype: support-library
+model: claude-sonnet-5
+tools: [Read, Write, Edit, Bash, Grep, Glob]
+description: >
+  Garanta cobertura e testes determinísticos conforme GS-07.
+---
+
 # QA Agent - native-lambda-router
 
 **Modelo:** Claude Sonnet 4  
