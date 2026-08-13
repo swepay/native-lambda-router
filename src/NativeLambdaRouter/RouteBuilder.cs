@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace NativeLambdaRouter;
@@ -158,8 +159,39 @@ public sealed partial class RouteBuilder : IRouteBuilder
         {
             path = path[..^1];
         }
-        return path.ToLowerInvariant();
+        return LowercaseStaticSegments(path);
     }
+
+    /// <summary>
+    /// Lowercases every part of the path template except declared {paramName} tokens.
+    /// Route matching against the request path stays case-insensitive regardless (see
+    /// <see cref="RouteMatcher"/>), but the parameter name itself must keep the casing
+    /// the caller declared (e.g. {tenantId}) so it matches the key they look up in
+    /// <see cref="RouteContext.PathParameters"/>. Lowercasing the whole template used to
+    /// silently rename {tenantId} to "tenantid" in the compiled pattern's named group.
+    /// </summary>
+    private static string LowercaseStaticSegments(string path)
+    {
+        var tokens = RouteParameterToken().Matches(path);
+        if (tokens.Count == 0)
+        {
+            return path.ToLowerInvariant();
+        }
+
+        var result = new StringBuilder(path.Length);
+        var cursor = 0;
+        foreach (Match token in tokens)
+        {
+            result.Append(path[cursor..token.Index].ToLowerInvariant());
+            result.Append(token.Value);
+            cursor = token.Index + token.Length;
+        }
+        result.Append(path[cursor..].ToLowerInvariant());
+        return result.ToString();
+    }
+
+    [GeneratedRegex(@"\{\w+\}")]
+    private static partial Regex RouteParameterToken();
 }
 
 /// <summary>
@@ -179,8 +211,11 @@ public sealed partial class RouteMatcher
 
     /// <summary>
     /// Finds a matching route for the given method and path.
-    /// Path matching is case-insensitive, but path parameter values
-    /// preserve the original casing from the request URL.
+    /// Path matching is case-insensitive, and path parameter values
+    /// preserve the original casing from the request URL. The returned
+    /// <see cref="RouteMatch.PathParameters"/> keys use the casing declared in the
+    /// route template (e.g. {tenantId}), and lookups against them are
+    /// case-insensitive.
     /// </summary>
     public RouteMatch? Match(string method, string path)
     {
@@ -204,7 +239,10 @@ public sealed partial class RouteMatcher
             // Re-match against the original-cased path to extract parameter values
             // with their original casing preserved
             var originalMatch = pattern.Match(originalPath);
-            var pathParams = new Dictionary<string, string>();
+            // Case-insensitive so a consumer's TryGetValue/indexer lookup succeeds
+            // regardless of the casing they use, even if a route template or a
+            // future refactor ever reintroduces a casing mismatch.
+            var pathParams = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var groupName in pattern.GetGroupNames())
             {
                 if (groupName == "0")

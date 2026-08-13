@@ -113,6 +113,23 @@ public class RouteBuilderTests
     }
 
     [Fact]
+    public void Map_ShouldNormalizePath_ToLowerCase_ButPreserveDeclaredParameterCasing()
+    {
+        // Arrange
+        var builder = new RouteBuilder();
+
+        // Act
+        builder.MapGet<TestCommand, TestResponse>("/V1/Tenants/{tenantId}/Dimension", ctx => new TestCommand("test"));
+
+        // Assert
+        // Static segments are lowercased for case-insensitive matching, but the
+        // {tenantId} token keeps the exact casing the caller declared - this is what
+        // RouteMatcher's compiled pattern uses as the named group (and therefore the
+        // PathParameters key), so a consumer's PathParameters["tenantId"] lookup works.
+        builder.Routes[0].Path.ShouldBe("/v1/tenants/{tenantId}/dimension");
+    }
+
+    [Fact]
     public void Map_ShouldSupportFluentChaining()
     {
         // Arrange
