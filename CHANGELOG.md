@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-08-12
+
+### Fixed
+
+- **Path parameter name casing was silently lowercased, breaking declared-casing lookups**: `RouteBuilder` normalized the *entire* route template — including `{paramName}` tokens — to lowercase at registration time. `RouteMatcher` compiles named capture groups straight from that template, so a route declared as `/tenants/{tenantId}/dimension` produced a group (and therefore a `RouteContext.PathParameters` key) named `tenantid`, not `tenantId`. Consumers doing `PathParameters.TryGetValue("tenantId", ...)` — the natural thing to do, matching what they declared — always got `false`. This broke `POST /v1/marketplace/tenants/{tenantId}/dimension` in `swepay-marketplace-subscription-hub` in production (endpoint returned 400).
+- Root cause was twofold, both fixed:
+  1. `RouteBuilder`'s path normalization now lowercases only the *static* segments of the template; the casing declared inside `{paramName}` tokens is preserved verbatim. Path matching itself is unaffected — it was, and remains, case-insensitive via `RegexOptions.IgnoreCase`.
+  2. `RouteMatcher.Match`'s `PathParameters` dictionary (and `RouteContext.PathParameters`'s default) now use `StringComparer.OrdinalIgnoreCase`, so lookups succeed regardless of the casing the caller uses — defense in depth on top of fix (1).
+
+### Changed (Observable, Non-Breaking)
+
+- `RouteContext.PathParameters` keys now match the casing declared in the route template (e.g. `{tenantId}` -> key `"tenantId"`, previously always lowercase). Existing code that already looked up parameters by their lowercased name (e.g. `PathParameters["tenantid"]`) keeps working, because lookups are now case-insensitive.
+- Public types are unchanged (`PathParameters` is still `Dictionary<string, string>`); this is a MINOR bump because the change is purely additive/corrective in behavior — no signature changed, and no previously-working call site is broken. Code that (incorrectly) relied on the lowercased key as an implementation detail continues to work due to the case-insensitive comparer.
+
 ## [2.2.0] - 2026-04-22
 
 ### Added

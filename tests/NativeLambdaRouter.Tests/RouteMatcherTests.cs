@@ -136,7 +136,8 @@ public class RouteMatcherTests
         // Assert
         result.ShouldNotBeNull();
         result!.PathParameters.Count.ShouldBe(2);
-        // Parameter names are lowercased from the route template normalization
+        // PathParameters lookup is case-insensitive, so both the declared casing
+        // and any other casing resolve to the same value.
         result.PathParameters["userid"].ShouldBe("user-123");
         result.PathParameters["orderid"].ShouldBe("order-456");
     }
@@ -283,6 +284,106 @@ public class RouteMatcherTests
         result.ShouldNotBeNull();
         result!.PathParameters["resource"].ShouldBe("products");
         result.PathParameters["id"].ShouldBe("prod-123");
+    }
+
+    [Fact]
+    public void Match_ShouldExposePathParameterKey_WithTemplateDeclaredCasing()
+    {
+        // Arrange
+        // Regression test for a production incident: the marketplace-subscription-hub
+        // registered "/v1/marketplace/tenants/{tenantId}/dimension" and read
+        // PathParameters["tenantId"], but the router lowercased the whole template at
+        // registration time, so the compiled pattern's named group (and therefore the
+        // dictionary key) was "tenantid". TryGetValue("tenantId", ...) always returned
+        // false, and the endpoint responded 400 in production.
+        var routes = new List<RouteDefinition>
+        {
+            RouteBuilderRoute(HttpMethod.GET, "/tenants/{tenantId}/dimension")
+        };
+        var matcher = new RouteMatcher(routes);
+
+        // Act
+        var result = matcher.Match("GET", "/tenants/abc-123/dimension");
+
+        // Assert
+        result.ShouldNotBeNull();
+        result!.PathParameters.TryGetValue("tenantId", out var declaredCasing).ShouldBeTrue();
+        declaredCasing.ShouldBe("abc-123");
+    }
+
+    [Fact]
+    public void Match_PathParametersLookup_ShouldBeCaseInsensitive()
+    {
+        // Arrange
+        var routes = new List<RouteDefinition>
+        {
+            RouteBuilderRoute(HttpMethod.GET, "/tenants/{tenantId}/dimension")
+        };
+        var matcher = new RouteMatcher(routes);
+
+        // Act
+        var result = matcher.Match("GET", "/tenants/abc-123/dimension");
+
+        // Assert
+        result.ShouldNotBeNull();
+        result!.PathParameters.TryGetValue("tenantid", out var lowercase).ShouldBeTrue();
+        lowercase.ShouldBe("abc-123");
+        result.PathParameters.TryGetValue("TENANTID", out var uppercase).ShouldBeTrue();
+        uppercase.ShouldBe("abc-123");
+    }
+
+    [Fact]
+    public void Match_ShouldMatchPath_RegardlessOfRequestOrTemplateCasing()
+    {
+        // Arrange
+        var routes = new List<RouteDefinition>
+        {
+            RouteBuilderRoute(HttpMethod.GET, "/x/{tenantId}/y")
+        };
+        var matcher = new RouteMatcher(routes);
+
+        // Act
+        var lowerRequest = matcher.Match("GET", "/x/abc/y");
+        var upperRequest = matcher.Match("GET", "/X/abc/Y");
+
+        // Assert
+        lowerRequest.ShouldNotBeNull();
+        upperRequest.ShouldNotBeNull();
+        lowerRequest!.PathParameters["tenantId"].ShouldBe("abc");
+        upperRequest!.PathParameters["tenantId"].ShouldBe("abc");
+    }
+
+    [Fact]
+    public void Match_ShouldPreserveDeclaredCasing_ForMultipleDistinctlyCasedParameters()
+    {
+        // Arrange
+        var routes = new List<RouteDefinition>
+        {
+            RouteBuilderRoute(HttpMethod.GET, "/tenants/{tenantId}/users/{USER_ID}")
+        };
+        var matcher = new RouteMatcher(routes);
+
+        // Act
+        var result = matcher.Match("GET", "/tenants/abc-123/users/user-456");
+
+        // Assert
+        result.ShouldNotBeNull();
+        result!.PathParameters["tenantId"].ShouldBe("abc-123");
+        result.PathParameters["USER_ID"].ShouldBe("user-456");
+    }
+
+    /// <summary>
+    /// Builds a route the way <see cref="RouteBuilder"/> does in production, so the
+    /// path template goes through the real normalization (which preserves declared
+    /// {paramName} casing while lowercasing static segments). Using this instead of
+    /// <see cref="CreateRoute"/>'s naive <c>ToLowerInvariant()</c> is what lets these
+    /// tests reproduce/guard the production bug.
+    /// </summary>
+    private static RouteDefinition RouteBuilderRoute(string method, string path)
+    {
+        var builder = new RouteBuilder();
+        builder.Map<TestCommand, TestResponse>(method, path, _ => new TestCommand("test"));
+        return builder.Routes[0];
     }
 
     private static RouteDefinition CreateRoute(string method, string path, string commandValue = "test")

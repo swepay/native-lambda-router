@@ -65,8 +65,10 @@ public sealed class RouteContext
 
     /// <summary>
     /// Path parameters extracted from the route (e.g., {id} -> "123").
+    /// Keys use the casing declared in the route template (e.g. {tenantId}), and
+    /// lookups (indexer/TryGetValue) are case-insensitive.
     /// </summary>
-    public Dictionary<string, string> PathParameters { get; init; } = [];
+    public Dictionary<string, string> PathParameters { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Query string parameters.

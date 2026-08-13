@@ -153,6 +153,9 @@ aws lambda update-function-code --function-name MyFunction --zip-file fileb://fu
 ## Limitações & Notas
 
 - Não suporta streaming de response (Lambda retorna completo)
-- Path parameters são case-sensitive
+- Path parameters: matching de path é case-insensitive; a chave em `PathParameters`
+  preserva o casing declarado no template (`{tenantId}` -> chave `"tenantId"`) e o
+  lookup (`TryGetValue`/indexer) é case-insensitive — funciona com qualquer casing
+  (corrigido em 2.3.0, ver `CHANGELOG.md`)
 - Authorization requer JWT válido no header `Authorization: Bearer <token>`
 - Content-Type padrão é `application/json`
