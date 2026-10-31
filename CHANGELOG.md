@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - In problem mode the response `Content-Type` is always `application/problem+json`, overriding the route's `Produces()`; other route headers are kept.
 - In problem mode an unexpected exception (500) never echoes `ex.Message` in `detail` (LGPD). The legacy envelope keeps its historical `details: ex.Message` until 3.0.
 
+### Build
+
+- `Microsoft.SourceLink.GitHub` 10.0.202 → 10.0.403: the transitive `Microsoft.Build.Tasks.Git` 10.0.202 carries CVE-2026-62900 (GHSA-23fw-v26w-5fgq) and NuGet audit (NU1902, warnings-as-errors) was failing `dotnet restore` in CI. Build-time only; no runtime impact.
+
 ### Deprecation Notice
 
 - `ErrorResponseFormat.LegacyEnvelope` remains the default throughout 2.x. **3.0 will flip the default to `ProblemDetails`**; consumers that need the old envelope after that must override `ErrorResponseFormat` explicitly.
