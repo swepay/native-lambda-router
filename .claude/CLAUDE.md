@@ -1,6 +1,6 @@
 # native-lambda-router
 
-**Versão:** v2.1.0  
+**Versão:** v2.4.0  
 **Tipo:** NuGet Library - Roteamento HTTP para AWS Lambda  
 **AOT-Safe:** Sim  
 **Linguagem:** C# 12+

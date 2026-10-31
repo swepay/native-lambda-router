@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-10-30
+
+### Added
+
+- **RFC 9457 `application/problem+json` error responses (opt-in)** — closes [#32](https://github.com/swepay/native-lambda-router/issues/32). Override `ErrorResponseFormat` to return `ErrorResponseFormat.ProblemDetails` and every error the router produces (mapped exceptions, 401/403 from authorization, route-not-found) becomes a problem document with `type` under `https://errors.swepay.com.br/`, `title`, `status`, `detail`, `instance` (request path) and the Swepay extensions `traceId` and `errors[]`. Consumers no longer need to reimplement the conversion at the edge (GS-04).
+- New types: `ProblemDetails`, `ProblemFieldError`, `ProblemTypes` (shared `common/*` catalog slugs + `ToUri`), `ErrorResponseFormat`.
+- New `ProblemException` base class: domain exceptions declare their own `status`, catalog `type` slug, `title`, optional `errors[]` and `retryAfter`; the router maps them in both formats (legacy envelope uses the title as `error`).
+- `ValidationException(string message, IReadOnlyList<ProblemFieldError> errors)` to carry field-level failures into `errors[]`.
+- `SerializeProblemDetails` (virtual) — the router serializes problem documents itself with `RouterJsonContext` (source-gen, AOT-safe); consumers do not need to touch `SerializeResponse`. Override only to add extension members.
+- `ResolveTraceId` (virtual) — `x-correlation-id` → `x-request-id` → X-Ray root from `x-amzn-trace-id` → API Gateway request id → Lambda request id.
+- `RouterJsonContext` now also covers `ProblemDetails` and `ProblemFieldError`.
+
+### Changed (Non-Breaking)
+
+- The exception-to-status mapping is now computed once (`MappedError`) and rendered per format; log messages and the legacy envelope are unchanged.
+- In problem mode the response `Content-Type` is always `application/problem+json`, overriding the route's `Produces()`; other route headers are kept.
+- In problem mode an unexpected exception (500) never echoes `ex.Message` in `detail` (LGPD). The legacy envelope keeps its historical `details: ex.Message` until 3.0.
+
+### Deprecation Notice
+
+- `ErrorResponseFormat.LegacyEnvelope` remains the default throughout 2.x. **3.0 will flip the default to `ProblemDetails`**; consumers that need the old envelope after that must override `ErrorResponseFormat` explicitly.
+
 ## [2.3.0] - 2026-08-12
 
 ### Fixed

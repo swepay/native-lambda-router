@@ -7,9 +7,23 @@ namespace NativeLambdaRouter;
 public class ValidationException : Exception
 {
     /// <summary>
+    /// Field-level failures, surfaced as the RFC 9457 <c>errors[]</c> extension when the
+    /// router runs in <see cref="ErrorResponseFormat.ProblemDetails"/> mode.
+    /// </summary>
+    public IReadOnlyList<ProblemFieldError>? Errors { get; }
+
+    /// <summary>
     /// Creates a new validation exception.
     /// </summary>
     public ValidationException(string message) : base(message) { }
+
+    /// <summary>
+    /// Creates a new validation exception carrying field-level failures.
+    /// </summary>
+    public ValidationException(string message, IReadOnlyList<ProblemFieldError> errors) : base(message)
+    {
+        Errors = errors;
+    }
 
     /// <summary>
     /// Creates a new validation exception with inner exception.
@@ -139,5 +153,75 @@ public class TooManyRequestsException : Exception
         }
 
         return retryAfter;
+    }
+}
+
+/// <summary>
+/// Base class for domain exceptions that already know how to describe themselves as an
+/// RFC 9457 problem. The router maps it to <see cref="Status"/> with the given
+/// <see cref="Type"/>/<see cref="Title"/> and uses the exception message as <c>detail</c>,
+/// so services declare product-specific problems as subclasses instead of reimplementing
+/// the exception-to-problem mapping at the edge.
+/// </summary>
+/// <example>
+/// <code>
+/// public sealed class TenantSuspendedException : ProblemException
+/// {
+///     public TenantSuspendedException()
+///         : base(403, "native-mail/tenant-suspended", "Tenant Suspended",
+///                "Reactivate the subscription in AWS Marketplace to resume sending email.") { }
+/// }
+/// </code>
+/// </example>
+public class ProblemException : Exception
+{
+    /// <summary>HTTP status code to return.</summary>
+    public int Status { get; }
+
+    /// <summary>
+    /// Error-catalog slug (<c>{service}/{error}</c>) or absolute URI. Resolved through
+    /// <see cref="ProblemTypes.ToUri"/> when the problem document is built.
+    /// </summary>
+    public string Type { get; }
+
+    /// <summary>Short, human-readable title of the problem class.</summary>
+    public string Title { get; }
+
+    /// <summary>Field-level failures, when applicable.</summary>
+    public IReadOnlyList<ProblemFieldError>? Errors { get; }
+
+    /// <summary>For 429 responses: suggested back-off, surfaced as the <c>Retry-After</c> header.</summary>
+    public TimeSpan? RetryAfter { get; }
+
+    /// <summary>
+    /// Creates a problem exception. <paramref name="detail"/> becomes both
+    /// <see cref="Exception.Message"/> and the problem <c>detail</c>, so it must be
+    /// pedagogical and free of PII, secrets and internal identifiers.
+    /// </summary>
+    public ProblemException(
+        int status,
+        string type,
+        string title,
+        string detail,
+        IReadOnlyList<ProblemFieldError>? errors = null,
+        TimeSpan? retryAfter = null,
+        Exception? innerException = null)
+        : base(detail, innerException)
+    {
+        if (status is < 400 or > 599)
+        {
+            throw new ArgumentOutOfRangeException(nameof(status), status, "Problem status must be a 4xx or 5xx HTTP status code.");
+        }
+
+        if (retryAfter is { } value && value < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(retryAfter), retryAfter, "Retry-after must be greater than or equal to zero.");
+        }
+
+        Status = status;
+        Type = type;
+        Title = title;
+        Errors = errors;
+        RetryAfter = retryAfter;
     }
 }

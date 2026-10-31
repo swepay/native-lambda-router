@@ -345,7 +345,64 @@ Built-in exception handling with automatic HTTP status codes:
 | `UnauthorizedException` | 401 Unauthorized | `{ "error": "Unauthorized", "details": "..." }` |
 | `ForbiddenException` | 403 Forbidden | `{ "error": "Forbidden", "details": "..." }` |
 | `ConflictException` | 409 Conflict | `{ "error": "Conflict", "details": "..." }` |
+| `TooManyRequestsException` | 429 Too Many Requests | `{ "error": "Too many requests", "details": "..." }` + `Retry-After` |
+| `ProblemException` (and subclasses) | its own `Status` | `{ "error": "<Title>", "details": "..." }` |
 | Other exceptions | 500 Internal Server Error | `{ "error": "Internal server error", "details": "..." }` |
+
+### RFC 9457 `application/problem+json` (opt-in, Swepay GS-04)
+
+Override `ErrorResponseFormat` and every error the router produces — mapped exceptions,
+401/403 from authorization and route-not-found — becomes an RFC 9457 problem document:
+
+```csharp
+public class MyFunction : RoutedApiGatewayFunction
+{
+    protected override ErrorResponseFormat ErrorResponseFormat => ErrorResponseFormat.ProblemDetails;
+}
+```
+
+```json
+{
+  "type": "https://errors.swepay.com.br/common/validation-failed",
+  "title": "Validation Failed",
+  "status": 400,
+  "detail": "Request has invalid fields.",
+  "instance": "/v1/messages",
+  "traceId": "1-67ab-cdef",
+  "errors": [{ "field": "recipient", "message": "Invalid format." }]
+}
+```
+
+| Exception | `status` | `type` |
+|-----------|----------|--------|
+| `ValidationException` | 400 | `common/validation-failed` (+ `errors[]` when built with field errors) |
+| `UnauthorizedException` / unauthenticated route | 401 | `common/unauthorized` |
+| `ForbiddenException` / policy failure | 403 | `common/forbidden` |
+| `NotFoundException` / no matching route | 404 | `common/not-found` |
+| `ConflictException` | 409 | `common/conflict` |
+| `TooManyRequestsException` | 429 | `common/too-many-requests` (+ `Retry-After`) |
+| `ProblemException` | its own | its own slug or absolute URI |
+| Other exceptions | 500 | `common/internal-error` — `detail` is generic, **never** `ex.Message` |
+
+- The router serializes the document itself with `RouterJsonContext` (source-gen, AOT-safe);
+  you do not need to add `ProblemDetails` to your `SerializeResponse`. Override
+  `SerializeProblemDetails` only to add extension members.
+- `Content-Type` is always `application/problem+json` for errors, overriding `Produces()`.
+- `traceId` is resolved by `ResolveTraceId` (override to change): `x-correlation-id` →
+  `x-request-id` → X-Ray root from `x-amzn-trace-id` → API Gateway request id → Lambda request id.
+- Product-specific problems: subclass `ProblemException` instead of mapping at the edge:
+
+```csharp
+public sealed class TenantSuspendedException : ProblemException
+{
+    public TenantSuspendedException()
+        : base(403, "native-mail/tenant-suspended", "Tenant Suspended",
+               "Reactivate the subscription in AWS Marketplace to resume sending email.") { }
+}
+```
+
+> **Deprecation:** the legacy envelope stays the default in 2.x. **3.0 flips the default to
+> `ProblemDetails`**; keep the old shape after that by overriding `ErrorResponseFormat`.
 
 ### Using Exceptions
 
@@ -440,6 +497,7 @@ NativeLambdaRouter provides `RouterJsonContext` with pre-configured serializatio
 | `ErrorResponse` | Standard error responses (400, 401, 403, 404, 409, 500) |
 | `HealthCheckResponse` | Health check endpoint response |
 | `RouteNotFoundResponse` | 404 route not found response |
+| `ProblemDetails` / `ProblemFieldError` | RFC 9457 problem document (serialized by the router itself) |
 
 ## Requirements
 
