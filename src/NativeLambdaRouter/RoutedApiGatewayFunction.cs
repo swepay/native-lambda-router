@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Net;
+using System.Text.Json;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.Lambda.Core;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,6 +14,8 @@ namespace NativeLambdaRouter;
 /// </summary>
 public abstract class RoutedApiGatewayFunction
 {
+    private const string ProblemJsonContentType = "application/problem+json";
+
     private readonly IMediator? _mediator;
     private readonly IServiceProvider? _serviceProvider;
     private readonly RouteMatcher _routeMatcher;
@@ -73,6 +77,15 @@ public abstract class RoutedApiGatewayFunction
     /// Gets whether this function uses a service provider for scoped resolution.
     /// </summary>
     protected bool UsesScopedMediator => _serviceProvider != null;
+
+    /// <summary>
+    /// Wire format of the error responses the router produces (exception mapping,
+    /// authorization failures, route-not-found). Defaults to
+    /// <see cref="NativeLambdaRouter.ErrorResponseFormat.LegacyEnvelope"/> in 2.x; override to return
+    /// <see cref="NativeLambdaRouter.ErrorResponseFormat.ProblemDetails"/> to emit RFC 9457
+    /// <c>application/problem+json</c> (Swepay GS-04). The default flips in 3.0.
+    /// </summary>
+    protected virtual ErrorResponseFormat ErrorResponseFormat => ErrorResponseFormat.LegacyEnvelope;
 
     /// <summary>
     /// Creates a new scope and returns the scoped mediator.
@@ -169,6 +182,60 @@ public abstract class RoutedApiGatewayFunction
     protected abstract string SerializeResponse(object response);
 
     /// <summary>
+    /// Serializes an RFC 9457 problem document. The default uses the router's own
+    /// source-generated <see cref="RouterJsonContext"/>, so consumers do not need to add
+    /// <see cref="ProblemDetails"/> to their <c>SerializeResponse</c>. Override only to add
+    /// service-specific extension members.
+    /// </summary>
+    protected virtual string SerializeProblemDetails(ProblemDetails problem)
+    {
+        return JsonSerializer.Serialize(problem, RouterJsonContext.Default.ProblemDetails);
+    }
+
+    /// <summary>
+    /// Resolves the correlation id reported as the problem <c>traceId</c>. Default order:
+    /// <c>x-correlation-id</c> header, <c>x-request-id</c> header, X-Ray root id from
+    /// <c>x-amzn-trace-id</c>, API Gateway request id, Lambda request id.
+    /// </summary>
+    protected virtual string? ResolveTraceId(APIGatewayHttpApiV2ProxyRequest request, ILambdaContext context)
+    {
+        if (request.Headers is not null)
+        {
+            foreach (var header in request.Headers)
+            {
+                if (string.IsNullOrEmpty(header.Value))
+                {
+                    continue;
+                }
+
+                if (header.Key.Equals("x-correlation-id", StringComparison.OrdinalIgnoreCase)
+                    || header.Key.Equals("x-request-id", StringComparison.OrdinalIgnoreCase))
+                {
+                    return header.Value;
+                }
+            }
+
+            foreach (var header in request.Headers)
+            {
+                if (header.Key.Equals("x-amzn-trace-id", StringComparison.OrdinalIgnoreCase)
+                    && TryParseXRayRoot(header.Value, out var root))
+                {
+                    return root;
+                }
+            }
+        }
+
+        var requestId = request.RequestContext?.RequestId;
+        if (!string.IsNullOrEmpty(requestId))
+        {
+            return requestId;
+        }
+
+        var awsRequestId = context.AwsRequestId;
+        return string.IsNullOrEmpty(awsRequestId) ? null : awsRequestId;
+    }
+
+    /// <summary>
     /// Override to provide custom health check response.
     /// </summary>
     protected virtual HealthCheckResponse GetHealthCheckResponse()
@@ -224,18 +291,15 @@ public abstract class RoutedApiGatewayFunction
             return CreateJsonResponse(HttpStatusCode.OK, GetHealthCheckResponse());
         }
 
+        var traceId = ResolveTraceId(request, context);
+
         try
         {
             // Find matching route
             var match = _routeMatcher.Match(method, path);
             if (match == null)
             {
-                return CreateJsonResponse(HttpStatusCode.NotFound, new RouteNotFoundResponse
-                {
-                    Error = "Route not found",
-                    Path = path,
-                    Method = method
-                });
+                return CreateRouteNotFoundResponse(method, path, traceId);
             }
 
             matchedRoute = match.Route;
@@ -247,25 +311,13 @@ public abstract class RoutedApiGatewayFunction
             var authResult = _authorizationService.Authorize(routeContext, match.Route.AuthorizationOptions);
             if (!authResult.Succeeded)
             {
-                // Determine if it's 401 (not authenticated) or 403 (not authorized)
-                if (routeContext.Claims.Count == 0)
-                {
-                    context.Logger.LogWarning($"Unauthorized: {authResult.FailureMessage}");
-                    return CreateResponse(HttpStatusCode.Unauthorized, new ErrorResponse
-                    {
-                        Error = "Unauthorized",
-                        Details = authResult.FailureMessage
-                    }, matchedRoute);
-                }
-                else
-                {
-                    context.Logger.LogWarning($"Forbidden: {authResult.FailureMessage}");
-                    return CreateResponse(HttpStatusCode.Forbidden, new ErrorResponse
-                    {
-                        Error = "Forbidden",
-                        Details = authResult.FailureMessage
-                    }, matchedRoute);
-                }
+                // 401 when the caller is not authenticated at all, 403 when authenticated but not allowed
+                var authenticated = routeContext.Claims.Count > 0;
+                var mapped = authenticated
+                    ? MappedError.Forbidden(authResult.FailureMessage)
+                    : MappedError.Unauthorized(authResult.FailureMessage);
+                context.Logger.LogWarning($"{mapped.LogPrefix}: {authResult.FailureMessage}");
+                return CreateErrorResponse(mapped, matchedRoute, path, traceId);
             }
 
             // Execute command via abstract method (implementation handles type safety)
@@ -303,76 +355,27 @@ public abstract class RoutedApiGatewayFunction
                 scope?.Dispose();
             }
         }
-        catch (ValidationException ex)
+        catch (Exception ex)
         {
-            context.Logger.LogWarning($"Validation error: {ex.Message}");
-            return CreateResponse(HttpStatusCode.BadRequest, new ErrorResponse
+            var mapped = MappedError.FromException(ex);
+            if (mapped.Status == HttpStatusCode.InternalServerError)
             {
-                Error = "Validation failed",
-                Details = ex.Message
-            }, matchedRoute);
-        }
-        catch (NotFoundException ex)
-        {
-            context.Logger.LogWarning($"Not found: {ex.Message}");
-            return CreateResponse(HttpStatusCode.NotFound, new ErrorResponse
+                context.Logger.LogError($"Error in {GetType().Name}: {ex.Message}");
+            }
+            else
             {
-                Error = "Resource not found",
-                Details = ex.Message
-            }, matchedRoute);
-        }
-        catch (UnauthorizedException ex)
-        {
-            context.Logger.LogWarning($"Unauthorized: {ex.Message}");
-            return CreateResponse(HttpStatusCode.Unauthorized, new ErrorResponse
-            {
-                Error = "Unauthorized",
-                Details = ex.Message
-            }, matchedRoute);
-        }
-        catch (ForbiddenException ex)
-        {
-            context.Logger.LogWarning($"Forbidden: {ex.Message}");
-            return CreateResponse(HttpStatusCode.Forbidden, new ErrorResponse
-            {
-                Error = "Forbidden",
-                Details = ex.Message
-            }, matchedRoute);
-        }
-        catch (ConflictException ex)
-        {
-            context.Logger.LogWarning($"Conflict: {ex.Message}");
-            return CreateResponse(HttpStatusCode.Conflict, new ErrorResponse
-            {
-                Error = "Conflict",
-                Details = ex.Message
-            }, matchedRoute);
-        }
-        catch (TooManyRequestsException ex)
-        {
-            context.Logger.LogWarning($"Too many requests: {ex.Message}");
-            var response = CreateResponse(HttpStatusCode.TooManyRequests, new ErrorResponse
-            {
-                Error = "Too many requests",
-                Details = ex.Message
-            }, matchedRoute);
-            if (ex.RetryAfter is { } retryAfter && retryAfter > TimeSpan.Zero)
+                context.Logger.LogWarning($"{mapped.LogPrefix}: {ex.Message}");
+            }
+
+            var response = CreateErrorResponse(mapped, matchedRoute, path, traceId);
+            if (mapped.RetryAfter is { } retryAfter && retryAfter > TimeSpan.Zero)
             {
                 // RFC 7231 §7.1.3 — delta-seconds. Round up so a 0.1s hint still
                 // communicates "wait a bit" rather than "retry immediately".
                 var seconds = Math.Max(1, (long)Math.Ceiling(retryAfter.TotalSeconds));
-                response.Headers["Retry-After"] = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                response.Headers["Retry-After"] = seconds.ToString(CultureInfo.InvariantCulture);
             }
             return response;
-        }
-        catch (Exception ex)
-        {
-            context.Logger.LogError($"Error in {GetType().Name}: {ex.Message}");
-            return CreateResponse(HttpStatusCode.InternalServerError, new ErrorResponse
-            {
-                Error = "Internal server error",
-                Details = ex.Message
-            }, matchedRoute);
         }
     }
 
@@ -429,6 +432,69 @@ public abstract class RoutedApiGatewayFunction
             QueryParameters = queryParams,
             Headers = headers,
             Claims = claims
+        };
+    }
+
+    private APIGatewayHttpApiV2ProxyResponse CreateRouteNotFoundResponse(string method, string path, string? traceId)
+    {
+        if (ErrorResponseFormat == ErrorResponseFormat.ProblemDetails)
+        {
+            return CreateProblemResponse(new ProblemDetails
+            {
+                Type = ProblemTypes.ToUri(ProblemTypes.NotFound),
+                Title = "Not Found",
+                Status = (int)HttpStatusCode.NotFound,
+                Detail = $"No route matches {method} {path}.",
+                Instance = path,
+                TraceId = traceId
+            }, route: null);
+        }
+
+        return CreateJsonResponse(HttpStatusCode.NotFound, new RouteNotFoundResponse
+        {
+            Error = "Route not found",
+            Path = path,
+            Method = method
+        });
+    }
+
+    private APIGatewayHttpApiV2ProxyResponse CreateErrorResponse(
+        MappedError error,
+        RouteDefinition? route,
+        string instance,
+        string? traceId)
+    {
+        if (ErrorResponseFormat == ErrorResponseFormat.ProblemDetails)
+        {
+            return CreateProblemResponse(new ProblemDetails
+            {
+                Type = ProblemTypes.ToUri(error.Type),
+                Title = error.Title,
+                Status = (int)error.Status,
+                Detail = error.Detail,
+                Instance = instance,
+                TraceId = traceId,
+                Errors = error.Errors
+            }, route);
+        }
+
+        return CreateResponse(error.Status, new ErrorResponse
+        {
+            Error = error.LegacyError,
+            Details = error.LegacyDetails
+        }, route);
+    }
+
+    private APIGatewayHttpApiV2ProxyResponse CreateProblemResponse(ProblemDetails problem, RouteDefinition? route)
+    {
+        var headers = BuildHeaders(route);
+        // A problem document is always problem+json, regardless of the route's Produces().
+        headers["Content-Type"] = ProblemJsonContentType;
+        return new APIGatewayHttpApiV2ProxyResponse
+        {
+            StatusCode = problem.Status,
+            Body = SerializeProblemDetails(problem),
+            Headers = headers
         };
     }
 
@@ -492,5 +558,83 @@ public abstract class RoutedApiGatewayFunction
         }
 
         return headers;
+    }
+
+    private static bool TryParseXRayRoot(string? traceHeader, out string root)
+    {
+        // Header shape: "Root=1-67ab...;Parent=...;Sampled=1"
+        root = string.Empty;
+        if (string.IsNullOrEmpty(traceHeader))
+        {
+            return false;
+        }
+
+        foreach (var segment in traceHeader.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (segment.StartsWith("Root=", StringComparison.OrdinalIgnoreCase) && segment.Length > 5)
+            {
+                root = segment[5..];
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Format-agnostic description of an error the router is about to return. Built once from
+    /// the exception (or auth failure) and rendered either as the legacy envelope or as a
+    /// problem document, so both formats share a single status/type mapping.
+    /// </summary>
+    private sealed record MappedError(
+        HttpStatusCode Status,
+        string Type,
+        string Title,
+        string? Detail,
+        string LegacyError,
+        string? LegacyDetails,
+        string LogPrefix,
+        IReadOnlyList<ProblemFieldError>? Errors = null,
+        TimeSpan? RetryAfter = null)
+    {
+        private const string InternalErrorDetail =
+            "An unexpected error occurred. If it persists, contact support quoting the traceId.";
+
+        public static MappedError Unauthorized(string? detail) => new(
+            HttpStatusCode.Unauthorized, ProblemTypes.Unauthorized, "Unauthorized",
+            detail ?? "Authentication is missing or invalid.", "Unauthorized", detail, "Unauthorized");
+
+        public static MappedError Forbidden(string? detail) => new(
+            HttpStatusCode.Forbidden, ProblemTypes.Forbidden, "Forbidden",
+            detail ?? "Insufficient permissions.", "Forbidden", detail, "Forbidden");
+
+        public static MappedError FromException(Exception ex) => ex switch
+        {
+            ProblemException p => new(
+                (HttpStatusCode)p.Status, p.Type, p.Title, p.Message, p.Title, p.Message, p.Title, p.Errors, p.RetryAfter),
+            ValidationException v => new(
+                HttpStatusCode.BadRequest, ProblemTypes.ValidationFailed, "Validation Failed",
+                v.Message, "Validation failed", v.Message, "Validation error", v.Errors),
+            NotFoundException => new(
+                HttpStatusCode.NotFound, ProblemTypes.NotFound, "Not Found",
+                ex.Message, "Resource not found", ex.Message, "Not found"),
+            UnauthorizedException => new(
+                HttpStatusCode.Unauthorized, ProblemTypes.Unauthorized, "Unauthorized",
+                ex.Message, "Unauthorized", ex.Message, "Unauthorized"),
+            ForbiddenException => new(
+                HttpStatusCode.Forbidden, ProblemTypes.Forbidden, "Forbidden",
+                ex.Message, "Forbidden", ex.Message, "Forbidden"),
+            ConflictException => new(
+                HttpStatusCode.Conflict, ProblemTypes.Conflict, "Conflict",
+                ex.Message, "Conflict", ex.Message, "Conflict"),
+            TooManyRequestsException t => new(
+                HttpStatusCode.TooManyRequests, ProblemTypes.TooManyRequests, "Too Many Requests",
+                t.Message, "Too many requests", t.Message, "Too many requests", null, t.RetryAfter),
+            // Unexpected fault: the problem document never echoes the exception message (LGPD).
+            // The legacy envelope keeps its historical behavior unchanged until 3.0.
+            _ => new(
+                HttpStatusCode.InternalServerError, ProblemTypes.InternalError, "Internal Server Error",
+                InternalErrorDetail, "Internal server error", ex.Message, "Error"),
+        };
     }
 }

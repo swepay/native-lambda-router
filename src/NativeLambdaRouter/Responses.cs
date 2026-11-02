@@ -108,6 +108,8 @@ public sealed class ApiGatewayResponse
 [JsonSerializable(typeof(ErrorResponse))]
 [JsonSerializable(typeof(HealthCheckResponse))]
 [JsonSerializable(typeof(RouteNotFoundResponse))]
+[JsonSerializable(typeof(ProblemDetails))]
+[JsonSerializable(typeof(ProblemFieldError))]
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
