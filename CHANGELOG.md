@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.1] - 2026-11-24
+
+### Changed
+
+- Same code as 2.5.0, republished as 2.5.1. The 2.5.0 tag never reached nuget.org because the CI API key had expired. The `publish` job now uses NuGet Trusted Publishing (OIDC) instead of a long-lived API key.
+
 ## [2.5.0] - 2026-11-24
 
 ### Added
