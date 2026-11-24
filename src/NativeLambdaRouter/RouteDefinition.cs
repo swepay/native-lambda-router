@@ -27,6 +27,15 @@ public sealed class RouteDefinition
     public required Type ResponseType { get; init; }
 
     /// <summary>
+    /// The actual request body type for this route, when it differs from the command type
+    /// (e.g., a binding derives most command fields from path/header/claims and only a
+    /// subset of properties is deserialized from the JSON body). Set via
+    /// <see cref="IRouteEndpointBuilder.Accepts{TBody}"/>. Null means "the command type is
+    /// also the body type", which is the historical default behavior.
+    /// </summary>
+    public Type? RequestBodyType { get; set; }
+
+    /// <summary>
     /// Optional custom response transformer.
     /// </summary>
     public Func<object, object>? ResponseTransformer { get; init; }

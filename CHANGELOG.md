@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-11-24
+
+### Added
+
+- **`IRouteEndpointBuilder.Accepts<TBody>()`** — closes [swepay/native-guard-backend#97](https://github.com/swepay/native-guard-backend/issues/97) (Option A). Declares that the real request body type for a `MapPost`/`MapPut`/`MapPatch` route is `TBody`, separate from the route's command type. Several routes bind their command from a mix of path parameters, headers, and claims, with only a subset of properties coming from the JSON body (e.g. `EnsureExternalIdpUserCommand` carries `realmId`/`assertionToken`/`callerClientId`/`callerIpAddress`, all server-derived, alongside the few fields the body DTO actually has). Before this release there was no way to tell an OpenAPI generator reading the route that the body is narrower than the command; `.Accepts<TBody>()` closes that gap by recording `RouteDefinition.RequestBodyType`.
+- `RouteDefinition.RequestBodyType` (`Type?`, settable, defaults to `null`) — the resolved body type, or `null` when the command type is also the body type (historical default, unchanged).
+
+### Non-Breaking
+
+- Routes that never call `.Accepts<TBody>()` keep `RequestBodyType == null` and behave exactly as before. `NativeLambdaRouter` does not deserialize the body itself in either case — this is metadata for doc generators (`NativeLambdaRouter.SourceGenerator.OpenApi` 1.9.0+ reads it to emit `requestBody` from `TBody` instead of the command).
+
 ## [2.4.0] - 2026-10-30
 
 ### Added

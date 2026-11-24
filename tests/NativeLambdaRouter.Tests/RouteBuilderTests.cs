@@ -231,8 +231,71 @@ public class RouteBuilderTests
         // Assert
         builder.Routes[0].ResponseHeaders["X-Docs"].ShouldBe("enabled");
     }
+
+    [Fact]
+    public void RequestBodyType_ShouldBeNull_WhenAcceptsIsNeverCalled()
+    {
+        // Arrange
+        var builder = new RouteBuilder();
+
+        // Act
+        builder.MapPost<TestCommand, TestResponse>("/items", ctx => new TestCommand("test"));
+
+        // Assert
+        // Historical default: the command type doubles as the body type.
+        builder.Routes[0].RequestBodyType.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Accepts_ShouldSetRequestBodyType_ToDeclaredBodyType()
+    {
+        // Arrange
+        var builder = new RouteBuilder();
+
+        // Act
+        builder.MapPost<TestCommand, TestResponse>("/items", ctx => new TestCommand("test"))
+            .Accepts<TestBodyDto>();
+
+        // Assert
+        builder.Routes[0].RequestBodyType.ShouldBe(typeof(TestBodyDto));
+    }
+
+    [Fact]
+    public void Accepts_ShouldNotAffect_CommandFactoryOrResponseType()
+    {
+        // Arrange
+        var builder = new RouteBuilder();
+
+        // Act
+        builder.MapPut<TestCommand, TestResponse>("/items/{id}", ctx => new TestCommand("test"))
+            .Accepts<TestBodyDto>();
+
+        // Assert
+        // Accepts<TBody>() is doc metadata only — it must not change routing/binding behavior.
+        builder.Routes[0].ResponseType.ShouldBe(typeof(TestResponse));
+        builder.Routes[0].CommandFactory(new RouteContext()).ShouldBeOfType<TestCommand>();
+    }
+
+    [Fact]
+    public void Accepts_ShouldSupportFluentChaining_WithOtherEndpointOptions()
+    {
+        // Arrange
+        var builder = new RouteBuilder();
+
+        // Act
+        builder.MapPost<TestCommand, TestResponse>("/items", ctx => new TestCommand("test"))
+            .Accepts<TestBodyDto>()
+            .Produces("application/json")
+            .WithHeader("X-Docs", "enabled");
+
+        // Assert
+        builder.Routes[0].RequestBodyType.ShouldBe(typeof(TestBodyDto));
+        builder.Routes[0].ResponseContentType.ShouldBe("application/json");
+        builder.Routes[0].ResponseHeaders["X-Docs"].ShouldBe("enabled");
+    }
 }
 
 // Test types
 public record TestCommand(string Value);
 public record TestResponse(string Result);
+public record TestBodyDto(string ExternalIdpSource);
