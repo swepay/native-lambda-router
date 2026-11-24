@@ -58,12 +58,17 @@ public class Function : RoutedApiGatewayFunction
             "/items",
             ctx => JsonSerializer.Deserialize(ctx.Body!, AppJsonContext.Default.CreateItemCommand)!);
 
-        // PUT /items/{id} - Update item
+        // PUT /items/{id} - Update item.
+        // The command carries the path "id" plus whatever the body deserializes to, but the
+        // actual JSON body is UpdateItemRequest, not UpdateItemCommand — Accepts<T>() tells
+        // OpenAPI generators to document UpdateItemRequest as the requestBody schema instead
+        // of UpdateItemCommand (which would wrongly include "id" as a required body field).
         routes.MapPut<UpdateItemCommand, UpdateItemResponse>(
             "/items/{id}",
             ctx => new UpdateItemCommand(
                 ctx.PathParameters["id"],
-                JsonSerializer.Deserialize(ctx.Body!, AppJsonContext.Default.UpdateItemRequest)!));
+                JsonSerializer.Deserialize(ctx.Body!, AppJsonContext.Default.UpdateItemRequest)!))
+            .Accepts<UpdateItemRequest>();
 
         // DELETE /items/{id} - Delete item
         routes.MapDelete<DeleteItemCommand, DeleteItemResponse>(
@@ -236,6 +241,56 @@ routes.MapPatch<TCommand, TResponse>(path, commandFactory);
 // Custom method
 routes.Map<TCommand, TResponse>(method, path, commandFactory, requiresAuth: true);
 ```
+
+## Request Body Type (`Accepts<TBody>()`)
+
+Some commands are built from more than the JSON body: a path parameter, a header, a JWT
+claim, and *then* a few fields from the body. The command factory needs all of that to build
+`TCommand`, but the actual request payload a caller sends is narrower:
+
+```csharp
+public sealed record EnsureExternalIdpUserCommand(
+    string RealmId,           // from path
+    string AssertionToken,    // from header
+    string CallerClientId,    // from claim
+    string CallerIpAddress,   // from request context
+    string ExternalIdpSource, // from body
+    string? DisplayName);     // from body
+
+routes.MapPost<EnsureExternalIdpUserCommand, EnsureExternalIdpUserResponse>(
+    "/admin/v1/realms/{realmId}/external-idp-users/ensure",
+    ctx =>
+    {
+        var body = JsonSerializer.Deserialize(
+            ctx.Body!, AppJsonContext.Default.AdminEnsureExternalIdpUserRequest)!;
+
+        return new EnsureExternalIdpUserCommand(
+            RealmId: ctx.PathParameters["realmId"],
+            AssertionToken: ctx.Headers["X-Assertion-Token"],
+            CallerClientId: ctx.Claims["client_id"],
+            CallerIpAddress: ctx.Headers["X-Forwarded-For"],
+            ExternalIdpSource: body.ExternalIdpSource,
+            DisplayName: body.DisplayName);
+    })
+    .Accepts<AdminEnsureExternalIdpUserRequest>();
+```
+
+Without `.Accepts<TBody>()`, an OpenAPI generator reading this route has no way to tell that
+the body is narrower than the command, and documents `EnsureExternalIdpUserCommand`'s full
+shape — including `realmId`, `assertionToken`, `callerClientId`, `callerIpAddress` — as a
+*required* request body. Clients following that spec would be told to send caller-identity
+fields in the JSON body that the server actually takes from the path/header/claims and never
+reads from the body.
+
+`.Accepts<TBody>()` records `RouteDefinition.RequestBodyType = typeof(TBody)` — no runtime
+behavior changes, `NativeLambdaRouter` still does not touch the body itself. Doc generators
+such as `NativeLambdaRouter.SourceGenerator.OpenApi` (1.9.0+) read this to emit the
+`requestBody` schema for `TBody` instead of the command. Routes that never call
+`.Accepts<TBody>()` are unaffected — `RequestBodyType` stays `null` and the command type is
+still what gets documented, exactly as before this method existed.
+
+See [ADR-0001](adr/0001-accepts-request-body-type.md) for why this lives on
+`IRouteEndpointBuilder` rather than as a purely syntactic marker in the OpenAPI generator.
 
 ## Authorization
 
