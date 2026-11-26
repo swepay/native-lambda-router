@@ -459,6 +459,49 @@ public sealed class TenantSuspendedException : ProblemException
 > **Deprecation:** the legacy envelope stays the default in 2.x. **3.0 flips the default to
 > `ProblemDetails`**; keep the old shape after that by overriding `ErrorResponseFormat`.
 
+### Per-request error format selection (2.6.0+)
+
+`ErrorResponseFormat` picks one format for the whole function. Override
+`SelectErrorResponseFormat` instead when some routes must keep a different shape — e.g. a
+function with OAuth 2.0/OIDC endpoints that have to keep the RFC 6749/7009/7662 error body
+while the rest of the function moves to RFC 9457:
+
+```csharp
+public class IdentityFunction : RoutedApiGatewayFunction
+{
+    protected override ErrorResponseFormat SelectErrorResponseFormat(ErrorResponseFormatContext context)
+    {
+        // OAuth boundary routes (/token, /revoke, /introspect) keep the legacy envelope;
+        // everything else — including a 404 for a path that doesn't match any route — moves
+        // to application/problem+json.
+        return IsOAuthBoundaryRoute(context.Path)
+            ? ErrorResponseFormat.LegacyEnvelope
+            : ErrorResponseFormat.ProblemDetails;
+    }
+}
+```
+
+`ErrorResponseFormatContext` carries everything the router knows about the error at the point
+it is formatted:
+
+| Member | Type | Notes |
+|--------|------|-------|
+| `Method` | `string` | Upper-cased HTTP method. |
+| `Path` | `string` | Request path, stage prefix already stripped. |
+| `Route` | `RouteDefinition?` | The matched route, or `null` for route-not-found (404) — the one error with no `RouteDefinition` to carry metadata on. |
+
+Called once per error, for every error the router produces itself: route-not-found, the
+401/403 from `RequireRole`/`RequireAuthorization`/`RequireClaim`, and every exception mapped
+by the router (including the 500 fallback) — one override covers all four. The default
+implementation returns `ErrorResponseFormat` unchanged, so a function that never overrides
+`SelectErrorResponseFormat` behaves exactly as before 2.6.0.
+
+❌ Don't reach for a per-route `.WithErrorFormat(...)` builder call first — it cannot express
+the route-not-found case (there is no route to attach it to), so you would still need a
+method like this one for 404s, and now have two places that decide the format instead of one.
+`SelectErrorResponseFormat` alone covers all four error call sites, including 404. See
+[ADR-0002](adr/0002-per-request-error-response-format-selection.md) for the full comparison.
+
 ### Using Exceptions
 
 ```csharp

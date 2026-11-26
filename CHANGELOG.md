@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-11-25
+
+### Added
+
+- **`RoutedApiGatewayFunction.SelectErrorResponseFormat(ErrorResponseFormatContext)`** (protected virtual) — closes [swepay/native-guard-backend#153](https://github.com/swepay/native-guard-backend/issues/153). `ErrorResponseFormat` (2.4.0+) picks the error format for the whole function; there was no way to vary it per route or per request. This adds a second override point, called once for every error the router produces (route-not-found, 401/403 from authorization, every mapped exception including the 500 fallback), that receives an `ErrorResponseFormatContext` (`Method`, `Path`, and the matched `Route`, which is `null` exactly for route-not-found) and returns the `ErrorResponseFormat` to use for that one error. The default implementation returns the existing `ErrorResponseFormat` property unchanged.
+- New type `ErrorResponseFormatContext` (`Method`, `Path`, `Route`).
+
+### Non-Breaking
+
+- A function that only overrides `ErrorResponseFormat` (2.4.0+) and never overrides `SelectErrorResponseFormat` is byte-for-byte unchanged: the new method's default body is `=> ErrorResponseFormat;`. The four internal call sites (`CreateRouteNotFoundResponse`, the authorization 401/403 branch, and the exception-mapping branch, both inside `FunctionHandler`) now resolve the format through `SelectErrorResponseFormat` instead of reading the property directly, but produce the identical decision when the method is not overridden.
+- See [ADR-0002](adr/0002-per-request-error-response-format-selection.md) for the alternative considered and discarded (a per-route `.WithErrorFormat(...)` builder call) and why it does not cover the route-not-found case by itself.
+
 ## [2.5.1] - 2026-11-24
 
 ### Changed
