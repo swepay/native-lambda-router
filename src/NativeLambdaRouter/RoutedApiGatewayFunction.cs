@@ -88,6 +88,36 @@ public abstract class RoutedApiGatewayFunction
     protected virtual ErrorResponseFormat ErrorResponseFormat => ErrorResponseFormat.LegacyEnvelope;
 
     /// <summary>
+    /// Chooses the error format for one specific error, overriding <see cref="ErrorResponseFormat"/>
+    /// for just that request/route. The default implementation returns <see cref="ErrorResponseFormat"/>
+    /// unchanged, so a function that only overrides the function-wide property keeps behaving exactly
+    /// as in 2.5.x — override this method instead when different routes need different formats
+    /// (e.g. a function that is migrating to <see cref="NativeLambdaRouter.ErrorResponseFormat.ProblemDetails"/>
+    /// one path prefix at a time, or that must keep a legacy/RFC-mandated shape on a subset of routes
+    /// while the rest moves to RFC 9457).
+    /// </summary>
+    /// <remarks>
+    /// Called once per error, for every error the router itself produces: route-not-found (where
+    /// <see cref="ErrorResponseFormatContext.Route"/> is <c>null</c> — there is no matched route to
+    /// carry metadata on), the 401/403 raised by <c>RequireRole</c>/authorization, and every exception
+    /// mapped by <c>MappedError.FromException</c> (including the 500 fallback). All four call sites
+    /// resolve the format the same way, so a function cannot end up with, say, a problem-document 404
+    /// and a legacy-envelope 500 on the same route unless it deliberately branches that way itself.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// protected override ErrorResponseFormat SelectErrorResponseFormat(ErrorResponseFormatContext context)
+    /// {
+    ///     // OAuth/OIDC endpoints keep the RFC 6749/7009/7662 error shape; everything else moves to RFC 9457.
+    ///     return IsOAuthBoundaryRoute(context.Path)
+    ///         ? ErrorResponseFormat.LegacyEnvelope
+    ///         : ErrorResponseFormat.ProblemDetails;
+    /// }
+    /// </code>
+    /// </example>
+    protected virtual ErrorResponseFormat SelectErrorResponseFormat(ErrorResponseFormatContext context) => ErrorResponseFormat;
+
+    /// <summary>
     /// Creates a new scope and returns the scoped mediator.
     /// The caller is responsible for disposing the scope.
     /// </summary>
@@ -317,7 +347,7 @@ public abstract class RoutedApiGatewayFunction
                     ? MappedError.Forbidden(authResult.FailureMessage)
                     : MappedError.Unauthorized(authResult.FailureMessage);
                 context.Logger.LogWarning($"{mapped.LogPrefix}: {authResult.FailureMessage}");
-                return CreateErrorResponse(mapped, matchedRoute, path, traceId);
+                return CreateErrorResponse(mapped, method, matchedRoute, path, traceId);
             }
 
             // Execute command via abstract method (implementation handles type safety)
@@ -367,7 +397,7 @@ public abstract class RoutedApiGatewayFunction
                 context.Logger.LogWarning($"{mapped.LogPrefix}: {ex.Message}");
             }
 
-            var response = CreateErrorResponse(mapped, matchedRoute, path, traceId);
+            var response = CreateErrorResponse(mapped, method, matchedRoute, path, traceId);
             if (mapped.RetryAfter is { } retryAfter && retryAfter > TimeSpan.Zero)
             {
                 // RFC 7231 §7.1.3 — delta-seconds. Round up so a 0.1s hint still
@@ -437,7 +467,14 @@ public abstract class RoutedApiGatewayFunction
 
     private APIGatewayHttpApiV2ProxyResponse CreateRouteNotFoundResponse(string method, string path, string? traceId)
     {
-        if (ErrorResponseFormat == ErrorResponseFormat.ProblemDetails)
+        var format = SelectErrorResponseFormat(new ErrorResponseFormatContext
+        {
+            Method = method,
+            Path = path,
+            Route = null
+        });
+
+        if (format == ErrorResponseFormat.ProblemDetails)
         {
             return CreateProblemResponse(new ProblemDetails
             {
@@ -460,11 +497,19 @@ public abstract class RoutedApiGatewayFunction
 
     private APIGatewayHttpApiV2ProxyResponse CreateErrorResponse(
         MappedError error,
+        string method,
         RouteDefinition? route,
         string instance,
         string? traceId)
     {
-        if (ErrorResponseFormat == ErrorResponseFormat.ProblemDetails)
+        var format = SelectErrorResponseFormat(new ErrorResponseFormatContext
+        {
+            Method = method,
+            Path = instance,
+            Route = route
+        });
+
+        if (format == ErrorResponseFormat.ProblemDetails)
         {
             return CreateProblemResponse(new ProblemDetails
             {

@@ -22,6 +22,33 @@ public enum ErrorResponseFormat
 }
 
 /// <summary>
+/// Describes the one error-formatting decision <see cref="RoutedApiGatewayFunction.SelectErrorResponseFormat"/>
+/// has to make for a given error. Carries everything the router itself knows at that point: the
+/// request's <see cref="Method"/> and normalized <see cref="Path"/>, plus the <see cref="Route"/> that
+/// was matched, when one was.
+/// </summary>
+/// <remarks>
+/// <see cref="Route"/> is <c>null</c> exactly when no route matched the request — the
+/// route-not-found (404) case. That is the one error the router can produce without ever
+/// having a <see cref="RouteDefinition"/> to carry per-route metadata on, so a selector that
+/// wants to special-case 404 has to branch on <see cref="Method"/>/<see cref="Path"/> instead.
+/// </remarks>
+public sealed class ErrorResponseFormatContext
+{
+    /// <summary>The HTTP method of the request, upper-cased (e.g. <c>"GET"</c>).</summary>
+    public required string Method { get; init; }
+
+    /// <summary>The request path, with any API Gateway stage prefix already stripped.</summary>
+    public required string Path { get; init; }
+
+    /// <summary>
+    /// The route that matched the request, or <c>null</c> when no route matched
+    /// (route-not-found).
+    /// </summary>
+    public RouteDefinition? Route { get; init; }
+}
+
+/// <summary>
 /// RFC 9457 problem document, served as <c>application/problem+json</c>.
 /// Carries the five RFC members plus the Swepay extensions <see cref="TraceId"/> and <see cref="Errors"/>.
 /// </summary>
